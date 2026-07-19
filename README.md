@@ -1,6 +1,6 @@
 # BloodChain POC: implementation walkthrough
 
-This is a working Node.js project implementing the vein-to-vein custody tracking system described in the BloodChain design doc: an HTS NFT per blood unit, an HCS event log for every custody step, and a Solidity contract on Hedera Smart Contract Service that blocks release of untested or failed units. It follows the two-week proof-of-concept scope exactly: mint, log, test-gate a transfer, close, and batch-flag.
+This is a working Node.js project implementing the vein-to-vein custody tracking system described in the BloodChain design doc: an HTS NFT per blood unit, an HCS event log for every custody step, and a Solidity contract on Hedera Smart Contract Service that blocks release of untested or failed units. It follows the proof-of-concept scope exactly: mint, log, test-gate a transfer, close, and batch-flag.
 
 Everything below is written in the order you should build and understand it, matching the 14 pieces from the design doc. Each section says what the piece does, why it exists, and points at the actual file.
 
