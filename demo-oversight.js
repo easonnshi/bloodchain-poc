@@ -94,6 +94,22 @@ async function main() {
   ]);
   console.log(`  blood bank: ${bankAddr}\n  lab: ${labAddr}\n  hospital: ${hospitalAddr}\n  transport: ${transportAddr}`);
 
+  // Authority-only calls (verdicts, penalties, elections) must be signed by
+  // whoever CURRENTLY holds the authority role. On a fresh contract that's
+  // the deployer (blood bank), but after an election it can be any org, so
+  // ask the contract instead of assuming. Without this, re-running the demo
+  // after an election fails with "not the oversight authority".
+  const orgDirectory = {
+    [bankAddr.toLowerCase()]: { name: "blood bank", client: undefined }, // undefined = default operator client
+    [labAddr.toLowerCase()]: { name: "lab", client: lab.client },
+    [hospitalAddr.toLowerCase()]: { name: "hospital", client: hospital.client },
+    [transportAddr.toLowerCase()]: { name: "transport", client: transport.client },
+  };
+  const currentAuthority = (await getAuthority({ contractId: oversightId })).toLowerCase();
+  const authorityOrg = orgDirectory[currentAuthority] ?? { name: "deployer", client: undefined };
+  const authClient = authorityOrg.client;
+  console.log(`  Current oversight authority: ${currentAuthority} (the ${authorityOrg.name})`);
+
   console.log("\n=== 1. Organizations register and post 10 HBAR bonds ===");
   await tolerate("bank", () => registerOrg({ contractId: oversightId, orgType: OrgType.BloodBank, bondHbar: 10 }));
   await tolerate("lab", () => registerOrg({ contractId: oversightId, orgType: OrgType.Lab, bondHbar: 10, client: lab.client }));
@@ -103,10 +119,10 @@ async function main() {
 
   console.log("\n=== 2. Authority records review scores (off-chain reviews, on-chain record) ===");
   await tolerate("scores", async () => {
-    await setReviewScore({ contractId: oversightId, orgAddress: bankAddr, score: 80 });
-    await setReviewScore({ contractId: oversightId, orgAddress: labAddr, score: 90 });
-    await setReviewScore({ contractId: oversightId, orgAddress: hospitalAddr, score: 70 });
-    await setReviewScore({ contractId: oversightId, orgAddress: transportAddr, score: 60 });
+    await setReviewScore({ contractId: oversightId, orgAddress: bankAddr, score: 80, client: authClient });
+    await setReviewScore({ contractId: oversightId, orgAddress: labAddr, score: 90, client: authClient });
+    await setReviewScore({ contractId: oversightId, orgAddress: hospitalAddr, score: 70, client: authClient });
+    await setReviewScore({ contractId: oversightId, orgAddress: transportAddr, score: 60, client: authClient });
   });
 
   console.log("\n=== 3. Hospital registers its nurse (hash only, no personal data) ===");
@@ -143,7 +159,7 @@ async function main() {
 
   console.log("\n=== 7. Verdict: guilty. 5 HBAR slashed from the hospital's bond ===");
   const before = await getOrgStatus({ contractId: oversightId, orgAddress: hospitalAddr });
-  await resolveInvestigation({ contractId: oversightId, investigationId: invId, guilty: true, penaltyHbar: 5 });
+  await resolveInvestigation({ contractId: oversightId, investigationId: invId, guilty: true, penaltyHbar: 5, client: authClient });
   const after = await getOrgStatus({ contractId: oversightId, orgAddress: hospitalAddr });
   await logEvent(topicId, {
     unitId: serial, eventType: "PENALTY_APPLIED", investigationId: invId,
@@ -154,7 +170,7 @@ async function main() {
   console.log("\n=== 8. Trace the nurse from the unit's own record, suspend on-chain ===");
   const unitRecord = getUnit(serial);
   console.log(`  Unit #${serial} was tested by: ${unitRecord.staffId}`);
-  await tolerate("suspend staff", () => suspendStaff({ contractId: oversightId, staffId: unitRecord.staffId }));
+  await tolerate("suspend staff", () => suspendStaff({ contractId: oversightId, staffId: unitRecord.staffId, client: authClient }));
   await logEvent(topicId, { unitId: serial, eventType: "STAFF_SUSPENDED", staffId: unitRecord.staffId });
   console.log(`  Staff ${unitRecord.staffId} suspended (their hash is now blocked).`);
 
@@ -168,19 +184,17 @@ async function main() {
   console.log("  Vote weights (tenure + reviews - scandals):", weights);
   console.log("  Note the hospital's weight: dragged down by its fresh scandal.");
 
-  await tolerate("startElection", () => startElection({ contractId: oversightId, candidateAddresses: [bankAddr, labAddr] }));
+  await tolerate("startElection", () => startElection({ contractId: oversightId, candidateAddresses: [bankAddr, labAddr], client: authClient }));
   await tolerate("bank votes bank", () => castVote({ contractId: oversightId, candidateAddress: bankAddr }));
   await tolerate("lab votes lab", () => castVote({ contractId: oversightId, candidateAddress: labAddr, client: lab.client }));
   await tolerate("transport votes lab", () => castVote({ contractId: oversightId, candidateAddress: labAddr, client: transport.client }));
   await tolerate("hospital votes bank", () => castVote({ contractId: oversightId, candidateAddress: bankAddr, client: hospital.client }));
-  await tolerate("closeElection", () => closeElection({ contractId: oversightId }));
+  await tolerate("closeElection", () => closeElection({ contractId: oversightId, client: authClient }));
 
-  const newAuthority = await getAuthority({ contractId: oversightId });
-  const winnerName = newAuthority.toLowerCase().includes(labAddr.toLowerCase().replace("0x", ""))
-    ? "the LAB"
-    : "the BLOOD BANK";
+  const newAuthority = (await getAuthority({ contractId: oversightId })).toLowerCase();
+  const winner = orgDirectory[newAuthority] ?? { name: "unknown" };
   await logEvent(topicId, { unitId: serial, eventType: "AUTHORITY_ELECTED", newAuthority });
-  console.log(`  New oversight authority: ${newAuthority} (${winnerName})`);
+  console.log(`  New oversight authority: ${newAuthority} (the ${winner.name})`);
 
   console.log("\nOversight demo complete.");
   console.log("Every step above (alert, investigation, penalty, staff suspension, election) is now a permanent HCS record.");

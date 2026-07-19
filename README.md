@@ -2,6 +2,8 @@
 
 This is a working Node.js project implementing the vein-to-vein custody tracking system described in the BloodChain design doc: an HTS NFT per blood unit, an HCS event log for every custody step, and a Solidity contract on Hedera Smart Contract Service that blocks release of untested or failed units. It follows the proof-of-concept scope exactly: mint, log, test-gate a transfer, close, and batch-flag.
 
+On top of that base sits an **oversight layer** (see `OVERSIGHT.md` for the full design): stale-unit fraud detection, bonds and slashing for guilty organizations, nurse/staff traceability, and a weighted DAO election that chooses which organization holds oversight authority.
+
 Everything below is written in the order you should build and understand it, matching the 14 pieces from the design doc. Each section says what the piece does, why it exists, and points at the actual file.
 
 ## Before you start
@@ -116,6 +118,32 @@ Three tests using Node's built-in `node:test`, matching the design doc's list: m
 
 ---
 
+## 15-19. The oversight layer (anti-fraud, punishment, DAO governance)
+
+Full design rationale, threat model, and honest limitations live in `OVERSIGHT.md`. The short version of what each new piece does:
+
+### 15. Stale-unit monitor — `src/checkStaleUnits.js`
+
+The chain cannot see a hospital secretly trading a unit away. What it can see is the absence of the event that should exist: every legitimate unit ends with `TRANSFUSED` or `DISPOSED`. `transferCustody()` now stamps `heldSince` on every custody change, and this monitor flags any unit held past `STALE_THRESHOLD_DAYS` (default 10) with no closing event, logging a permanent `STALE_ALERT` to HCS.
+
+### 16. Bonds, investigations, and slashing — `contracts/BloodOversight.sol` + `src/oversight.js`
+
+Every organization registers by posting a 10 HBAR bond from its own account. A stale alert (or anything else) can open an on-chain investigation; the elected authority delivers the verdict, and a guilty finding automatically slashes the bond, increments a public scandal counter, and suspends the org after 3 scandals or if its bond drops below half the minimum. Deploy with `node scripts/compileContract.js BloodOversight` then `node scripts/04-deployOversight.js`.
+
+### 17. Staff traceability — `submitTestResult()` + the staff registry
+
+Every test result now records the `staffId` of the nurse or technician who ran it, in HCS and the local index. On-chain, staff are registered as SHA-256 hashes only (no personal data on the ledger). When a unit is implicated, one lookup answers who tested it, and the authority can suspend that staff hash permanently.
+
+### 18. Weighted DAO election
+
+All registered orgs elect the oversight authority. Vote weight is computed on-chain at voting time: base 10, plus 2 per month of tenure, plus reviewScore/10, minus 5 per scandal. A hospital with a fresh fraud finding votes with a visibly smaller voice. Note the handover is real: once a new org wins, the old authority genuinely loses its powers, which is why `demo-oversight.js` asks the contract who currently holds authority before making authority-only calls.
+
+### 19. Oversight demo — `demo-oversight.js`
+
+Plays the full fraud story: registration with real bonds, a nurse-tagged test, transfer to the hospital, silence past the (compressed) holding window, stale alert, investigation, 5 HBAR slash, staff suspension, then the election. Requires `OVERSIGHT_CONTRACT_ID` in `.env`.
+
+---
+
 ## Running the whole thing
 
 ```
@@ -128,8 +156,15 @@ node scripts/03-deployContract.js   # -> CONTRACT_ID
 node scripts/registerAllParties.js
 node demo.js
 npm test
+
+# oversight layer
+node scripts/compileContract.js BloodOversight
+node scripts/04-deployOversight.js  # -> OVERSIGHT_CONTRACT_ID
+node demo-oversight.js
 ```
 
 ## Known gaps (worth naming, not hiding)
 
-This matches the design doc's own honesty section: the system proves a record wasn't changed *after* it was written, not that it was correct when written. A lab can still submit a wrong pass/fail through `submitTestResult()` and the contract will faithfully store and enforce that wrong result. Nothing here catches a skipped log entry or a hospital privately handing a unit to a third party outside the tracked flow — that needs random audits and cross-checks outside the blockchain, which this POC doesn't attempt to solve.
+This matches the design doc's own honesty section: the system proves a record wasn't changed *after* it was written, not that it was correct when written. A lab can still submit a wrong pass/fail through `submitTestResult()` and the contract will faithfully store and enforce that wrong result.
+
+The oversight layer narrows, but does not close, the diversion gap: the stale-unit monitor catches a hospital that lets a unit go unaccounted for, and bond slashing makes getting caught expensive, but a hospital that fakes a `TRANSFUSED` event and diverts the unit anyway can only be caught by off-chain reconciliation against patient records. Review scores for vote weighting are off-chain facts written on-chain by the authority acting as an oracle, which shifts trust rather than removing it. See `OVERSIGHT.md` for the full list.

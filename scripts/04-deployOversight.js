@@ -23,7 +23,7 @@ async function main() {
 
   const tx = new ContractCreateFlow()
     .setBytecode(bytecode)
-    .setGas(2_000_000); // bigger contract than the gate; generous ceiling, unused gas is refunded
+    .setGas(4_000_000); // bigger contract than the gate; generous ceiling, unused gas is refunded
 
   const submit = await tx.execute(client);
   const receipt = await submit.getReceipt(client);
