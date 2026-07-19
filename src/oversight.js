@@ -81,6 +81,27 @@ export async function resolveInvestigation({ contractId, investigationId, guilty
   return (await submit.getReceipt(client)).status.toString();
 }
 
+/** Rehabilitation: an org restores its bond by paying in. */
+export async function topUpBond({ contractId, amountHbar, client = defaultClient }) {
+  const tx = new ContractExecuteTransaction()
+    .setContractId(contractId)
+    .setGas(GAS)
+    .setPayableAmount(new Hbar(amountHbar))
+    .setFunction("topUpBond");
+  const submit = await tx.execute(client);
+  return (await submit.getReceipt(client)).status.toString();
+}
+
+/** Rehabilitation: the authority reinstates a suspended org whose bond is back at minimum. */
+export async function reinstateOrg({ contractId, orgAddress, client = defaultClient }) {
+  const tx = new ContractExecuteTransaction()
+    .setContractId(contractId)
+    .setGas(GAS)
+    .setFunction("reinstateOrg", new ContractFunctionParameters().addAddress(orgAddress));
+  const submit = await tx.execute(client);
+  return (await submit.getReceipt(client)).status.toString();
+}
+
 export async function registerStaff({ contractId, staffId, client = defaultClient }) {
   const tx = new ContractExecuteTransaction()
     .setContractId(contractId)

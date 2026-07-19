@@ -128,7 +128,7 @@ The chain cannot see a hospital secretly trading a unit away. What it can see is
 
 ### 16. Bonds, investigations, and slashing — `contracts/BloodOversight.sol` + `src/oversight.js`
 
-Every organization registers by posting a 10 HBAR bond from its own account. A stale alert (or anything else) can open an on-chain investigation; the elected authority delivers the verdict, and a guilty finding automatically slashes the bond, increments a public scandal counter, and suspends the org after 3 scandals or if its bond drops below half the minimum. Deploy with `node scripts/compileContract.js BloodOversight` then `node scripts/04-deployOversight.js`.
+Every organization registers by posting a 10 HBAR bond from its own account. A stale alert (or anything else) can open an on-chain investigation; the elected authority delivers the verdict, and a guilty finding slashes the bond (capped at 20% of what remains per case) and increments a public scandal counter. Suspension only follows a sustained pattern: 5 guilty verdicts or a bond below a quarter of the minimum. A suspended org can be rehabilitated: restore the bond via `topUpBond()`, then the authority calls `reinstateOrg()`, which also forgives one scandal. Deploy with `node scripts/compileContract.js BloodOversight` then `node scripts/04-deployOversight.js`.
 
 ### 17. Staff traceability — `submitTestResult()` + the staff registry
 

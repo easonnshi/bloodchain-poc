@@ -14,7 +14,11 @@ A blockchain cannot see a physical hand-off. If a hospital walks a unit out the 
 
 ### 2. Bonds and slashing (`contracts/BloodOversight.sol`)
 
-Every organization registers on the oversight contract by posting a minimum 10 HBAR bond from its own account. That bond is what makes on-chain punishment real rather than symbolic: an investigation resolved as guilty slashes a penalty from the bond and increments a public scandal counter. Cross either threshold, bond below half the minimum or 3 scandals, and the org is automatically suspended: it loses its vote, its right to open investigations, and (by policy) its eligibility to receive units. Slashed funds stay in the contract as an insurance pool.
+Every organization registers on the oversight contract by posting a minimum 10 HBAR bond from its own account. That bond is what makes on-chain punishment real rather than symbolic: an investigation resolved as guilty slashes a penalty from the bond and increments a public scandal counter.
+
+Punishment is deliberately graduated, not ruinous. A single verdict can never take more than 20% of the org's remaining bond (`MAX_PENALTY_BPS`), so each successive slash is smaller in absolute terms and one mistake never wipes an org out. Suspension, the loss of voting rights and standing, only triggers on a sustained pattern: 5 guilty verdicts, or a bond ground down below a quarter of the minimum. Slashed funds stay in the contract as an insurance pool.
+
+There is also a road back. A suspended org can restore its bond to the minimum via `topUpBond()`, after which the elected authority may call `reinstateOrg()`, which lifts the suspension and forgives one scandal. Reinstatement is intentionally a human decision rather than automatic: money alone should not buy back trust, but rehabilitation must be possible, because a permanently crippled hospital helps nobody's blood supply.
 
 What this deliberately does not claim: bond slashing is an economic deterrent, not a legal one. Criminal prosecution of actual blood diversion happens off-chain, through regulators. The chain contributes the evidence trail: timestamped custody history, the alert, the investigation, and the verdict, none of which anyone can quietly edit afterward.
 
@@ -27,7 +31,7 @@ Every test result now carries a `staffId` (the nurse or technician who ran it), 
 The oversight authority (whoever resolves investigations and applies penalties) is itself elected by the registered organizations: hospitals, labs, transport, blood banks. Vote weight is computed on-chain at the moment of voting:
 
 ```
-weight = 10 (base) + 2 per month of tenure + reviewScore/10 - 5 per scandal
+weight = 10 (base) + 2 per month of tenure + reviewScore/10 - 2 per scandal
 ```
 
 Floor of 1 for active orgs; suspended orgs get 0. So exactly what was asked for: standing grows with how long you've been trusted, shrinks with your scandal record, and reflects reviews. A hospital caught diverting blood votes with a visibly smaller voice in the very next election.

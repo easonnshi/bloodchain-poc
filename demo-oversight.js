@@ -43,6 +43,8 @@ import {
   resolveInvestigation,
   registerStaff,
   suspendStaff,
+  topUpBond,
+  reinstateOrg,
   startElection,
   castVote,
   closeElection,
@@ -157,9 +159,9 @@ async function main() {
   await logEvent(topicId, { unitId: serial, eventType: "INVESTIGATION_OPENED", investigationId: invId, subject: "hospital" });
   console.log(`  Investigation #${invId} opened.`);
 
-  console.log("\n=== 7. Verdict: guilty. 5 HBAR slashed from the hospital's bond ===");
+  console.log("\n=== 7. Verdict: guilty. 2 HBAR requested, capped at 20% of remaining bond ===");
   const before = await getOrgStatus({ contractId: oversightId, orgAddress: hospitalAddr });
-  await resolveInvestigation({ contractId: oversightId, investigationId: invId, guilty: true, penaltyHbar: 5, client: authClient });
+  await resolveInvestigation({ contractId: oversightId, investigationId: invId, guilty: true, penaltyHbar: 2, client: authClient });
   const after = await getOrgStatus({ contractId: oversightId, orgAddress: hospitalAddr });
   await logEvent(topicId, {
     unitId: serial, eventType: "PENALTY_APPLIED", investigationId: invId,
@@ -195,6 +197,22 @@ async function main() {
   const winner = orgDirectory[newAuthority] ?? { name: "unknown" };
   await logEvent(topicId, { unitId: serial, eventType: "AUTHORITY_ELECTED", newAuthority });
   console.log(`  New oversight authority: ${newAuthority} (the ${winner.name})`);
+
+  console.log("\n=== 10. Rehabilitation: if the hospital is suspended, it can earn its way back ===");
+  const status = await getOrgStatus({ contractId: oversightId, orgAddress: hospitalAddr });
+  if (status.suspended) {
+    const shortfall = Math.max(0, 10 - status.bondHbar);
+    console.log(`  Hospital is suspended with a ${status.bondHbar} HBAR bond. Topping up ${shortfall} HBAR...`);
+    await tolerate("top up bond", () => topUpBond({ contractId: oversightId, amountHbar: shortfall, client: hospital.client }));
+    // The new authority (possibly the lab, after the election) decides reinstatement.
+    const authorityNow = orgDirectory[(await getAuthority({ contractId: oversightId })).toLowerCase()];
+    await tolerate("reinstate", () => reinstateOrg({ contractId: oversightId, orgAddress: hospitalAddr, client: authorityNow?.client }));
+    const restored = await getOrgStatus({ contractId: oversightId, orgAddress: hospitalAddr });
+    await logEvent(topicId, { unitId: serial, eventType: "ORG_REINSTATED", org: "hospital", bondHbar: restored.bondHbar, scandalCount: restored.scandalCount });
+    console.log(`  Hospital reinstated: suspended=${restored.suspended}, bond=${restored.bondHbar} HBAR, scandals=${restored.scandalCount} (one forgiven).`);
+  } else {
+    console.log(`  Hospital was penalized but not suspended (bond ${status.bondHbar} HBAR, scandals ${status.scandalCount}) - graduated punishment working as intended.`);
+  }
 
   console.log("\nOversight demo complete.");
   console.log("Every step above (alert, investigation, penalty, staff suspension, election) is now a permanent HCS record.");

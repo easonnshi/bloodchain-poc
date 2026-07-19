@@ -58,6 +58,13 @@ contract BloodOversight {
     // (1 HBAR = 100,000,000 tinybars), so 10 HBAR = 10 * 1e8.
     uint256 public constant MIN_BOND = 10 * 1e8;
 
+    // Graduated punishment settings. A single verdict can never take more
+    // than 20% of an org's remaining bond, so one mistake is recoverable
+    // and only a pattern of guilt drains the bond.
+    uint256 public constant MAX_PENALTY_BPS = 2000; // basis points: 2000 = 20%
+    uint256 public constant SUSPEND_SCANDALS = 5;   // suspension after 5 guilty verdicts
+    uint256 public constant SUSPEND_BOND_FLOOR = MIN_BOND / 4; // or bond below 2.5 HBAR
+
     address public authority;                 // current elected oversight org
     mapping(address => Org) public orgs;
     address[] public orgList;
@@ -77,6 +84,8 @@ contract BloodOversight {
     event ReviewScoreSet(address indexed org, uint256 score);
     event InvestigationOpened(uint256 indexed id, address indexed subject, int64 unitSerial, string reason);
     event InvestigationResolved(uint256 indexed id, bool guilty, uint256 penalty, bool orgSuspended);
+    event BondToppedUp(address indexed org, uint256 amount, uint256 newBond);
+    event OrgReinstated(address indexed org, uint256 remainingScandals);
     event StaffRegistered(bytes32 indexed staffHash, address indexed employer);
     event StaffSuspended(bytes32 indexed staffHash);
     event ElectionStarted(uint256 indexed electionId, address[] candidates);
@@ -138,9 +147,11 @@ contract BloodOversight {
     }
 
     /// The authority delivers the verdict. If guilty: slash the bond by
-    /// `penalty` (capped at what remains), count the scandal, and
-    /// auto-suspend when the org crosses either threshold. Slashed funds
-    /// remain in the contract as an insurance pool.
+    /// `penalty`, but never more than MAX_PENALTY_BPS of what remains, so
+    /// punishment is graduated rather than ruinous. Suspension only after
+    /// a sustained pattern (SUSPEND_SCANDALS verdicts) or a bond run down
+    /// to SUSPEND_BOND_FLOOR. Slashed funds remain in the contract as an
+    /// insurance pool.
     function resolveInvestigation(uint256 id, bool guilty, uint256 penalty) external onlyAuthority {
         Investigation storage inv = investigations[id];
         require(!inv.resolved, "already resolved");
@@ -149,16 +160,41 @@ contract BloodOversight {
         bool nowSuspended = false;
         if (guilty) {
             Org storage o = orgs[inv.subject];
-            uint256 slash = penalty > o.bond ? o.bond : penalty;
+            uint256 maxSlash = (o.bond * MAX_PENALTY_BPS) / 10000;
+            uint256 slash = penalty > maxSlash ? maxSlash : penalty;
             o.bond -= slash;
             inv.penalty = slash;
             o.scandalCount += 1;
-            if (o.bond < MIN_BOND / 2 || o.scandalCount >= 3) {
+            if (o.bond < SUSPEND_BOND_FLOOR || o.scandalCount >= SUSPEND_SCANDALS) {
                 o.suspended = true;
                 nowSuspended = true;
             }
         }
         emit InvestigationResolved(id, guilty, inv.penalty, nowSuspended);
+    }
+
+    /// Rehabilitation, part 1: any registered org can restore its bond by
+    /// paying in. Punishment should be recoverable for an org that cleans
+    /// up; a permanently crippled participant helps nobody's blood supply.
+    function topUpBond() external payable {
+        require(orgs[msg.sender].exists, "unknown org");
+        require(msg.value > 0, "nothing sent");
+        orgs[msg.sender].bond += msg.value;
+        emit BondToppedUp(msg.sender, msg.value, orgs[msg.sender].bond);
+    }
+
+    /// Rehabilitation, part 2: the authority can reinstate a suspended org
+    /// once its bond is back at the minimum. Reinstatement also forgives
+    /// one scandal, so a rehabilitated org is not one mistake away from
+    /// instant re-suspension. Deliberately a human decision, not automatic:
+    /// paying money alone should not buy back trust.
+    function reinstateOrg(address org) external onlyAuthority {
+        Org storage o = orgs[org];
+        require(o.exists && o.suspended, "org not suspended");
+        require(o.bond >= MIN_BOND, "bond must be restored to minimum first");
+        o.suspended = false;
+        if (o.scandalCount > 0) o.scandalCount -= 1;
+        emit OrgReinstated(org, o.scandalCount);
     }
 
     /// Employers register the hash of a staff member's ID. The raw ID
@@ -177,14 +213,14 @@ contract BloodOversight {
 
     /// Vote weight, computed live at vote time:
     ///   base 10, plus 2 per month of tenure, plus reviewScore/10,
-    ///   minus 5 per scandal. Floor of 1 for active orgs (a scandal
+    ///   minus 2 per scandal. Floor of 1 for active orgs (a scandal
     ///   history shrinks your voice but only suspension removes it).
     function voteWeight(address orgAddr) public view returns (uint256) {
         Org storage o = orgs[orgAddr];
         if (!o.exists || o.suspended) return 0;
         uint256 tenureMonths = (block.timestamp - o.registeredAt) / 30 days;
         uint256 base = 10 + (tenureMonths * 2) + (o.reviewScore / 10);
-        uint256 malus = o.scandalCount * 5;
+        uint256 malus = o.scandalCount * 2;
         return malus >= base ? 1 : base - malus;
     }
 
