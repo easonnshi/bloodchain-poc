@@ -67,7 +67,14 @@ export async function transferCustody({
   const submit = await transferTx.execute(client);
   const receipt = await submit.getReceipt(client);
 
-  upsertUnit(serial, { status: "in_transit", holder: toAccountId.toString() });
+  // heldSince starts the clock the stale-unit monitor checks against: a
+  // unit sitting with one holder past the allowed window with no
+  // transfusion or disposal logged is the signal for possible diversion.
+  upsertUnit(serial, {
+    status: "in_transit",
+    holder: toAccountId.toString(),
+    heldSince: new Date().toISOString(),
+  });
   await logEvent(topicId, {
     unitId: serial,
     eventType: "CUSTODY_TRANSFER",

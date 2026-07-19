@@ -17,8 +17,12 @@ import { logEvent } from "./logEvent.js";
  * @param {string} params.serial - the unit's NFT serial number
  * @param {boolean} params.passed - test outcome
  * @param {string} [params.testType] - e.g. "HIV", "hepatitis_panel"
+ * @param {string} [params.staffId] - ID of the nurse/technician who ran the
+ *   test. Recorded in the HCS log and local index so that if this unit is
+ *   later implicated in fraud, the exact person who handled testing can be
+ *   traced and investigated (see src/oversight.js suspendStaff).
  */
-export async function submitTestResult({ contractId, topicId, serial, passed, testType = "infectious_disease_panel" }) {
+export async function submitTestResult({ contractId, topicId, serial, passed, testType = "infectious_disease_panel", staffId = "STAFF-UNRECORDED" }) {
   const tx = await new ContractExecuteTransaction()
     .setContractId(contractId)
     .setGas(200_000)
@@ -36,13 +40,14 @@ export async function submitTestResult({ contractId, topicId, serial, passed, te
   const receipt = await submit.getReceipt(client);
 
   const status = passed ? "tested_pass" : "tested_fail";
-  upsertUnit(serial, { status, testType, testedAt: new Date().toISOString() });
+  upsertUnit(serial, { status, testType, staffId, testedAt: new Date().toISOString() });
 
   await logEvent(topicId, {
     unitId: serial,
     eventType: "TEST_RESULT",
     testType,
     passed,
+    staffId,
   });
 
   console.log(`Unit #${serial} test result on-chain: ${passed ? "PASS" : "FAIL"} (${receipt.status.toString()})`);

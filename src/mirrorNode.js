@@ -37,6 +37,22 @@ export async function getTopicMessages(topicId) {
   return messages;
 }
 
+/**
+ * The EVM address a Hedera account appears as inside a smart contract
+ * (msg.sender). For ECDSA-keyed accounts this is the key's alias address,
+ * for ED25519 accounts it's the "long-zero" form of the account number,
+ * so deriving it locally is unreliable. Asking the mirror node gives the
+ * correct answer for both. Needed by the oversight layer whenever an
+ * account must be passed INTO a contract call (investigation subjects,
+ * election candidates).
+ */
+export async function getEvmAddress(accountId) {
+  const res = await fetch(`${BASE_URL}/accounts/${accountId.toString()}`);
+  if (!res.ok) throw new Error(`Mirror node request failed: ${res.status} ${res.statusText}`);
+  const body = await res.json();
+  return body.evm_address; // "0x..." string
+}
+
 /** Current on-chain info (owner, metadata) for one NFT serial. */
 export async function getNftInfo(tokenId, serial) {
   const res = await fetch(`${BASE_URL}/tokens/${tokenId}/nfts/${serial}`);

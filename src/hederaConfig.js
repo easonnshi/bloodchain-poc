@@ -43,3 +43,16 @@ export function loadPartyCredentials(prefix) {
     privateKey: PrivateKey.fromStringDer(requireEnv(`${prefix}_ACCOUNT_KEY`)),
   };
 }
+
+// A full client that signs AS a specific party (lab, hospital, transport),
+// paying its own fees. Needed for the oversight layer: when a hospital
+// registers its bond or casts a DAO vote, the contract's msg.sender must
+// be the hospital's own account, not the blood bank's operator account.
+export function makePartyClient(prefix) {
+  const { accountId, privateKey } = loadPartyCredentials(prefix);
+  const partyClient =
+    network === "mainnet" ? Client.forMainnet() : Client.forTestnet();
+  partyClient.setOperator(accountId, privateKey);
+  partyClient.setDefaultMaxTransactionFee(new Hbar(20));
+  return { client: partyClient, accountId, privateKey };
+}
