@@ -21,7 +21,11 @@ if (!tokenId) {
 async function main() {
   for (const prefix of ["LAB", "HOSPITAL", "TRANSPORT"]) {
     const { accountId, privateKey } = loadPartyCredentials(prefix);
+    try {
     await registerParty(accountId, privateKey, tokenId);
+    } catch (err) {
+      console.log(`  (${prefix}: skipped - ${err.message.split("\n")[0]})`);
+    }
   }
   console.log("All parties registered.");
 }
