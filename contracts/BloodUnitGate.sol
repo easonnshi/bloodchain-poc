@@ -17,6 +17,7 @@ contract BloodUnitGate {
 
     event TestResultRecorded(int64 indexed serial, TestStatus status, address indexed submittedBy);
     event ClearanceChecked(int64 indexed serial, bool passed);
+    event LabAuthorized(address indexed lab);
 
     modifier onlyOwner() {
         require(msg.sender == owner, "not owner");
@@ -36,8 +37,10 @@ contract BloodUnitGate {
         authorizedLabs[msg.sender] = true;
     }
 
+
     function authorizeLab(address lab) external onlyOwner {
         authorizedLabs[lab] = true;
+        emit LabAuthorized(lab);
     }
 
     /// Records a pass/fail result for a unit. Reverts if the caller is not

@@ -227,6 +227,9 @@ contract BloodOversight {
     function startElection(address[] calldata candidates) external onlyAuthority {
         require(!electionOpen, "election already open");
         require(candidates.length >= 2, "need at least 2 candidates");
+        for (uint256 i = 0; i < candidates.length; i++) {
+        require(orgs[candidates[i]].exists && !orgs[candidates[i]].suspended, "candidate must be an active registered org");
+        }
         electionId += 1;
         currentCandidates = candidates;
         electionOpen = true;
@@ -266,6 +269,7 @@ contract BloodOversight {
                 winner = c;
             }
         }
+        require(best > 0, "no votes cast");
         authority = winner;
         emit AuthorityElected(electionId, winner, best);
     }
