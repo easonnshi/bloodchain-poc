@@ -36,8 +36,11 @@ contract BloodUnitGate {
         authorizedLabs[msg.sender] = true;
     }
 
+    event LabAuthorized(address indexed lab);
+
     function authorizeLab(address lab) external onlyOwner {
         authorizedLabs[lab] = true;
+        emit LabAuthorized(lab);
     }
 
     /// Records a pass/fail result for a unit. Reverts if the caller is not
