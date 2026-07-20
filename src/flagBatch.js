@@ -34,21 +34,30 @@ export async function flagBatch({ topicId, serial, reason }) {
   });
 
   for (const sibling of siblings) {
+    const alreadyUsed = sibling.status === "closed";
+    const note = alreadyUsed
+      ? `sibling unit #${serial} in the same donation batch was flagged after this unit was already ${sibling.closeReason || "closed"} - patient follow-up may be needed`
+      : `sibling of #${serial}: ${reason}`;
+    
     upsertUnit(sibling.serial, {
-      status: "quarantined",
-      flagReason: `sibling of #${serial}: ${reason}`,
+      ...(alreadyUsed ? {} : { status: "quarantined" }), // can't quarantine blood already used
+      flagReason: note,
     });
     await logEvent(topicId, {
       unitId: sibling.serial,
-      eventType: "BATCH_ALERT",
-      reason: `quarantined - sibling unit #${serial} in the same donation batch was flagged (${reason})`,
+      eventType: alreadyUsed ? "POST_USE_ALERT" : "BATCH_ALERT",
+      reason: note,
       donorBatchId: flaggedUnit.donorBatchId,
     });
-    console.log(`  -> also quarantined sibling unit #${sibling.serial}`);
+    console.log(
+      alreadyUsed
+        ? `  -> sibling unit #${sibling.serial} was already ${sibling.closeReason || "closed"} - flagged for patient follow-up`
+        : `  -> also quarantined sibling unit #${sibling.serial}`
+    );
   }
 
   console.log(
-    `Unit #${serial} flagged (${reason}). ${siblings.length} sibling unit(s) from batch ${flaggedUnit.donorBatchId} quarantined.`
+    `Unit #${serial} flagged (${reason}). ${siblings.length} sibling unit(s) from batch ${flaggedUnit.donorBatchId} processed.`
   );
   return { flagged: serial, quarantinedSiblings: siblings.map((s) => s.serial) };
 }
