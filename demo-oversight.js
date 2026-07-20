@@ -177,12 +177,18 @@ async function main() {
   console.log(`  Staff ${unitRecord.staffId} suspended (their hash is now blocked).`);
 
   console.log("\n=== 9. Weighted DAO election for the oversight authority role ===");
-  const weights = {
-    bank: await getVoteWeight({ contractId: oversightId, orgAddress: bankAddr }),
-    lab: await getVoteWeight({ contractId: oversightId, orgAddress: labAddr }),
-    hospital: await getVoteWeight({ contractId: oversightId, orgAddress: hospitalAddr }),
-    transport: await getVoteWeight({ contractId: oversightId, orgAddress: transportAddr }),
-  };
+  // Wrapped per-org: a single reverting view call must not abort the
+  // election below it. On revert we also dump the org's raw stored state
+  // (bond/scandals/reviewScore) so a genuine contract bug is diagnosable
+  // instead of just crashing with a Panic and no context.
+  const weights = {};
+  for (const [name, addr] of [["bank", bankAddr], ["lab", labAddr], ["hospital", hospitalAddr], ["transport", transportAddr]]) {
+    weights[name] = await tolerate(`voteWeight(${name})`, () => getVoteWeight({ contractId: oversightId, orgAddress: addr }));
+    if (weights[name] === null) {
+      const raw = await tolerate(`orgStatus(${name}) diagnostic`, () => getOrgStatus({ contractId: oversightId, orgAddress: addr }));
+      console.log(`    raw org state for ${name}:`, raw);
+    }
+  }
   console.log("  Vote weights (tenure + reviews - scandals):", weights);
   console.log("  Note the hospital's weight: dragged down by its fresh scandal.");
 
