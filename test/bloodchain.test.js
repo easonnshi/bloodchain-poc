@@ -25,7 +25,7 @@ import { transferCustody } from "../src/transferCustody.js";
 import { flagBatch } from "../src/flagBatch.js";
 
 const { TOKEN_ID: tokenId, TOPIC_ID: topicId, CONTRACT_ID: contractId } = process.env;
-const configured = Boolean(tokenId && topicId && contractId);
+const configured = Boolean(tokenId && topicId && contractId && process.env.LAB_ACCOUNT_ID && process.env.LAB_ACCOUNT_KEY);
 
 const batchId = `TEST-BATCH-${Date.now()}`;
 
