@@ -266,6 +266,7 @@ contract BloodOversight {
                 winner = c;
             }
         }
+        require(best > 0, "no votes cast");
         authority = winner;
         emit AuthorityElected(electionId, winner, best);
     }
