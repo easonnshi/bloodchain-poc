@@ -160,7 +160,7 @@ npm test
 # oversight layer
 node scripts/compileContract.js BloodOversight
 node scripts/04-deployOversight.js  # -> OVERSIGHT_CONTRACT_ID
-node demo-oversight.js
+node demo-oversight-elect-first.js
 ```
 
 ## Known gaps (worth naming, not hiding)
