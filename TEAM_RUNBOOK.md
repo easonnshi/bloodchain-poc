@@ -15,7 +15,7 @@ a running app.
 ## 2. Get the code
 
 ```
-git clone https://github.com/easonnshi/bloodchain-poc
+git clone https://github.com/MoemenF-03/bloodchain-poc/tree/claude-buildout
 cd bloodchain-poc
 ```
 
