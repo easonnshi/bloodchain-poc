@@ -16,7 +16,7 @@
     "server": "node server/index.js",
     "demo": "node demo.js",
     "demo-oversight": "node demo-oversight.js",
-    "test": "node --test test/bloodchain.test.js"
+    "test": "node --test --test-force-exit test/bloodchain.test.js"
   },
   "dependencies": {
     "@hashgraph/sdk": "^2.51.0",
