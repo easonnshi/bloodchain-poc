@@ -51,3 +51,12 @@ export function getUnitsByBatch(donorBatchId) {
 export function allUnits() {
   return Object.values(load().units);
 }
+
+/**
+ * Atomically replace the whole index. Only rebuildIndex.js uses this, when
+ * reconstructing local state from HCS history - everything else goes
+ * through upsertUnit so normal operation stays append-ish.
+ */
+export function replaceAllUnits(units) {
+  save({ units });
+}

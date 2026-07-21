@@ -159,7 +159,7 @@ async function main() {
 
   console.log("\n=== 5. A unit is minted, tested, and sent to the hospital ===");
   const serial = await mintUnit({ tokenId, topicId, donorBatchId: "BATCH-ELECT-FIRST", collectionCenterId: "CTR-01" });
-  await submitTestResult({ contractId, topicId, serial, passed: true, staffId: NURSE_ID });
+  await submitTestResult({ contractId, topicId, serial, passed: true, staffId: NURSE_ID, client: lab.client });
   await transferCustody({
     contractId, topicId, tokenId, serial,
     fromAccountId: operatorId, fromPrivateKey: operatorKey,

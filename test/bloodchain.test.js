@@ -18,7 +18,7 @@ import assert from "node:assert/strict";
 import dotenv from "dotenv";
 dotenv.config();
 
-import { operatorId, operatorKey, loadPartyCredentials } from "../src/hederaConfig.js";
+import { operatorId, operatorKey, makePartyClient } from "../src/hederaConfig.js";
 import { mintUnit } from "../src/mintUnit.js";
 import { submitTestResult } from "../src/submitTestResult.js";
 import { transferCustody } from "../src/transferCustody.js";
@@ -36,10 +36,12 @@ test("mintUnit succeeds and returns a serial number", { skip: !configured && "ru
 });
 
 test("transferCustody blocks a unit that failed its test", { skip: !configured && "run scripts/01-03 and fill in .env first" }, async () => {
-  const lab = loadPartyCredentials("LAB");
+  const lab = makePartyClient("LAB");
   const serial = await mintUnit({ tokenId, topicId, donorBatchId: batchId, collectionCenterId: "CTR-TEST" });
 
-  await submitTestResult({ contractId, topicId, serial, passed: false });
+  // Signed by the lab's own key - exercises the contract's onlyAuthorizedLab
+  // path for real (requires scripts/05-authorizeLab.js to have been run).
+  await submitTestResult({ contractId, topicId, serial, passed: false, client: lab.client });
 
   const result = await transferCustody({
     contractId,
