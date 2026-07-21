@@ -6,7 +6,7 @@
 // local index also gets updated so status checks don't need a chain read.
 
 import { ContractExecuteTransaction, ContractFunctionParameters } from "@hashgraph/sdk";
-import { client } from "./hederaConfig.js";
+import { client as defaultClient } from "./hederaConfig.js";
 import { upsertUnit } from "./localIndex.js";
 import { logEvent } from "./logEvent.js";
 
@@ -21,23 +21,47 @@ import { logEvent } from "./logEvent.js";
  *   test. Recorded in the HCS log and local index so that if this unit is
  *   later implicated in fraud, the exact person who handled testing can be
  *   traced and investigated (see src/oversight.js suspendStaff).
+ * @param {Client} [params.client] - the client whose account signs the
+ *   contract call. Pass the LAB's client (makePartyClient("LAB")) so
+ *   msg.sender is the lab's own address and the contract's
+ *   onlyAuthorizedLab check is doing real work. Defaults to the operator
+ *   client, which the contract trusts only because it deployed it - fine
+ *   for scratch scripts, but demos and the API server pass the lab client.
  */
-export async function submitTestResult({ contractId, topicId, serial, passed, testType = "infectious_disease_panel", staffId = "STAFF-UNRECORDED" }) {
-  const tx = await new ContractExecuteTransaction()
+export async function submitTestResult({
+  contractId,
+  topicId,
+  serial,
+  passed,
+  testType = "infectious_disease_panel",
+  staffId = "STAFF-UNRECORDED",
+  client = defaultClient,
+}) {
+  const tx = new ContractExecuteTransaction()
     .setContractId(contractId)
     .setGas(200_000)
     .setFunction(
       "submitTestResult",
       new ContractFunctionParameters().addInt64(Number(serial)).addBool(passed)
-    )
-    .freezeWith(client);
-  // NOTE (POC simplification): this calls the contract as the operator
-  // account, which the contract's constructor already trusts as an
-  // authorized lab. In production each real lab would sign this with its
-  // own key, after the council calls authorizeLab() for that lab's address.
+    );
 
   const submit = await tx.execute(client);
-  const receipt = await submit.getReceipt(client);
+  let receipt;
+  try {
+    receipt = await submit.getReceipt(client);
+  } catch (err) {
+    // The most likely revert here is the onlyAuthorizedLab modifier: the
+    // signing account was never authorized on the gate contract. Surface
+    // that as an actionable message instead of a bare CONTRACT_REVERT.
+    if (String(err.status ?? err.message).includes("CONTRACT_REVERT")) {
+      throw new Error(
+        `submitTestResult reverted for unit #${serial}: the signing account is not an ` +
+          `authorized lab on ${contractId}. Run "node scripts/05-authorizeLab.js" once ` +
+          `(as the contract owner) to authorize the LAB account from .env.`
+      );
+    }
+    throw err;
+  }
 
   const status = passed ? "tested_pass" : "tested_fail";
   upsertUnit(serial, { status, testType, staffId, testedAt: new Date().toISOString() });
@@ -48,8 +72,12 @@ export async function submitTestResult({ contractId, topicId, serial, passed, te
     testType,
     passed,
     staffId,
+    submittedBy: client.operatorAccountId?.toString(),
   });
 
-  console.log(`Unit #${serial} test result on-chain: ${passed ? "PASS" : "FAIL"} (${receipt.status.toString()})`);
+  console.log(
+    `Unit #${serial} test result on-chain: ${passed ? "PASS" : "FAIL"} ` +
+      `(${receipt.status.toString()}, signed by ${client.operatorAccountId?.toString() ?? "operator"})`
+  );
   return status;
 }

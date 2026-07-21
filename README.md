@@ -6,6 +6,8 @@ On top of that base sits an **oversight layer** (see `OVERSIGHT.md` for the full
 
 Everything below is written in the order you should build and understand it, matching the 14 pieces from the design doc. Each section says what the piece does, why it exists, and points at the actual file.
 
+On top of the backend there is now a **React frontend** (`frontend/`) with a thin key-holding **API server** (`server/`) — see "Running the whole thing" below. Companion docs: `AUDIT_NOTES.md` (security/correctness audit: what was fixed, what was deliberately left and why), `COURSE_ANSWERS.md` (the DDiB26 required discussion answers), `OVERSIGHT.md` (oversight-layer design + honest limitations), `PROJECT_WRITEUP.md` (original POC writeup).
+
 ## Before you start
 
 You need Node.js 18+ (for native `fetch`) and a funded Hedera testnet account. If you don't have one yet: go to the Hedera Developer Portal, create a testnet account, and you'll get an account ID (`0.0.xxxxx`) and a DER-encoded private key. Fund it from the built-in testnet faucet.
@@ -52,6 +54,7 @@ node scripts/02-createTopic.js      # -> paste TOPIC_ID into .env
 node scripts/compileContract.js
 node scripts/03-deployContract.js   # -> paste CONTRACT_ID into .env
 node scripts/registerAllParties.js
+node scripts/05-authorizeLab.js     # authorize the lab's own key on the gate
 ```
 
 ---
@@ -74,7 +77,7 @@ The tamper-proof property doesn't come from the JSON payload — it comes from H
 
 Records a lab's pass/fail result in two places at once: on the `BloodUnitGate` contract (piece 7, so the transfer gate can actually enforce it) and on HCS via `logEvent()` (so it's part of the permanent audit trail). It also updates the local index so a status check doesn't need a live chain read.
 
-Worth noting honestly: this POC calls the contract using the *operator* account, which the contract already trusts as an authorized lab by default. A real deployment would have each lab sign with its own key, added via `authorizeLab()` — the contract already has that method, it's just not exercised by this demo to keep the two-week scope manageable.
+The trust model here is enforced on-chain, not assumed: `scripts/05-authorizeLab.js` (run once at setup) calls the contract's `authorizeLab()` with the lab's EVM address, and the demos and API server submit test results **signed by the lab's own key**, so the contract's `onlyAuthorizedLab` check on `msg.sender` is doing real work. The on-chain `TestResultRecorded` event carries the lab's address as `submittedBy` — anyone can verify *which* lab attested a result. (The deployer is still bootstrapped as an authorized lab in the constructor so scratch scripts work, but nothing in the demo flow relies on that anymore.)
 
 ### 7. `transferCustody()` + smart contract — `src/transferCustody.js` + `contracts/BloodUnitGate.sol`
 
@@ -98,7 +101,7 @@ The recall mechanism. Given one flagged unit, it looks up every other unit shari
 
 ### 10. Mirror node query layer — `src/mirrorNode.js`
 
-The SDK can submit transactions and read the receipt of a transaction you just submitted, but it can't page back through history — "give me every message ever posted to this topic" isn't something a consensus node answers. That's what mirror nodes are for: they replay the ledger and expose it over a plain REST API. This file is the only place in the project that talks to `https://testnet.mirrornode.hedera.com`. You'd reach for this to rebuild the local index from scratch, or to prove to an outside auditor that the local index matches what's actually on-chain.
+The SDK can submit transactions and read the receipt of a transaction you just submitted, but it can't page back through history — "give me every message ever posted to this topic" isn't something a consensus node answers. That's what mirror nodes are for: they replay the ledger and expose it over a plain REST API. This file is the only place in the backend that talks to `https://testnet.mirrornode.hedera.com`. Both of its jobs are now real commands: `npm run rebuild-index` replays the full HCS topic in consensus order and reconstructs `data/index.json` from chain history alone, and `npm run check-index` does the same rebuild in memory and **diffs it against the local cache without writing** — drift detection an outside auditor can run themselves (exit code 2 on drift, so it can gate CI).
 
 ### 11. Lightweight off-chain index — `src/localIndex.js`
 
@@ -136,7 +139,7 @@ Every test result now records the `staffId` of the nurse or technician who ran i
 
 ### 18. Weighted DAO election
 
-All registered orgs elect the oversight authority. Vote weight is computed on-chain at voting time: base 10, plus 2 per month of tenure, plus reviewScore/10, minus 5 per scandal. A hospital with a fresh fraud finding votes with a visibly smaller voice. Note the handover is real: once a new org wins, the old authority genuinely loses its powers, which is why `demo-oversight.js` asks the contract who currently holds authority before making authority-only calls.
+All registered orgs elect the oversight authority. Vote weight is computed on-chain at voting time: base 10, plus 2 per month of tenure, plus reviewScore/10, minus 2 per scandal (floor of 1 for active orgs; suspended orgs vote with 0 — matching `voteWeight()` in `BloodOversight.sol`, which is the source of truth). A hospital with a fresh fraud finding votes with a visibly smaller voice. Note the handover is real: once a new org wins, the old authority genuinely loses its powers, which is why `demo-oversight.js` asks the contract who currently holds authority before making authority-only calls.
 
 ### 19. Oversight demo — `demo-oversight.js`
 
@@ -146,22 +149,82 @@ Plays the full fraud story: registration with real bonds, a nurse-tagged test, t
 
 ## Running the whole thing
 
+**Prerequisites:** Node.js 18+, and a funded Hedera **testnet** account
+(free: portal.hedera.com → create testnet account → faucet). You need four
+accounts total — operator/blood-bank plus lab, hospital, transport.
+
+**Team note — one deployment, shared by everyone:** whoever runs the setup
+scripts first creates the one shared `TOKEN_ID`, `TOPIC_ID`, `CONTRACT_ID`
+and `OVERSIGHT_CONTRACT_ID`. Everyone else just pastes those same four IDs
+into their own `.env` (with their own account keys). The public network is
+the sync layer — there is nothing else to sync. `data/index.json` is a
+disposable local cache; run `npm run rebuild-index` on a fresh clone and it
+reconstructs itself from chain history.
+
+### 1. Backend setup (once per team, in order)
+
 ```
 npm install
-cp .env.example .env        # fill in OPERATOR_ID, OPERATOR_KEY, and the 3 party accounts
-node scripts/01-createToken.js      # -> TOKEN_ID
-node scripts/02-createTopic.js      # -> TOPIC_ID
+cp .env.example .env                # fill in OPERATOR_ID/KEY + the 3 party accounts
+node scripts/01-createToken.js      # -> paste TOKEN_ID into .env
+node scripts/02-createTopic.js      # -> paste TOPIC_ID into .env
 node scripts/compileContract.js
-node scripts/03-deployContract.js   # -> CONTRACT_ID
-node scripts/registerAllParties.js
-node demo.js
-npm test
+node scripts/03-deployContract.js   # -> paste CONTRACT_ID into .env
+node scripts/registerAllParties.js  # associates lab/hospital/transport with the token
+node scripts/05-authorizeLab.js     # authorizes the LAB account on the gate contract
 
 # oversight layer
 node scripts/compileContract.js BloodOversight
-node scripts/04-deployOversight.js  # -> OVERSIGHT_CONTRACT_ID
-node demo-oversight-elect-first.js
+node scripts/04-deployOversight.js  # -> paste OVERSIGHT_CONTRACT_ID into .env
 ```
+
+### 2. Demos and tests
+
+```
+node demo.js                        # core custody story (block + batch recall)
+node demo-oversight.js              # fraud -> investigation -> slash -> election
+node demo-oversight-elect-first.js  # same powers, election-first ordering (fresh oversight deploy recommended)
+npm test                            # 3 integration tests against real testnet
+npm run check-index                 # audit local cache against on-chain history (read-only)
+```
+
+### 3. Frontend + API server
+
+```
+npm run server                      # local API on 127.0.0.1:4000 (holds the .env keys)
+cd frontend && npm install && npm run dev   # -> http://localhost:5173
+```
+
+Two modes, decided automatically at load:
+
+- **Live** — the API server is running with a configured `.env`: buttons
+  fire real signed testnet transactions; the custody-trail view reads the
+  **public mirror node directly from the browser** and every event links to
+  HashScan. The header shows `HEDERA TESTNET — LIVE`.
+- **Simulation** — no credentials (or no server): the full UI runs against
+  an in-memory engine under a loud `SIMULATION` badge, including a scripted
+  "Play the full story" mode on the Overview page for presentations. It
+  exists so the UI can be developed and graded without keys — it never
+  pretends to be verifiable.
+
+Views: Overview (live custody flow map + consensus feed), Trace (public
+per-unit history + QR bag label), Blood Bank (mint / recall / stale sweep /
+cache-vs-ledger audit), Lab (lab-key-signed verdicts), Hospital & Transport
+(transfers + closures), Oversight DAO (bonds, scandals, weighted elections,
+investigations), Reconciliation (patient-record cross-check — the diversion
+gap, demonstrated), and a step-through Explainer for the presentation.
+
+## Dependency security (npm audit status)
+
+`npm audit` on the original lockfile reported 13 vulnerabilities (1 critical, 4 high, 8 low). Here is what was actually done about each, rather than a blanket `npm audit fix --force`:
+
+**Fixed via `overrides` in `package.json`** (scoped, non-breaking — verified: SDK loads and both contracts compile after the bump):
+- `protobufjs` 8.0.0 → 8.7.1 and 7.5.4 → 7.6.5 (critical: code-execution/prototype-pollution advisories). These are transitive under `@hashgraph/sdk`, which was already at its latest version but pins vulnerable ranges.
+- `@grpc/grpc-js` 1.12.6 → 1.14.4 (high: malformed-message crash bugs). Same-major bump, drop-in.
+
+**Accepted, with reasons:**
+- `elliptic` (9 low, via the `@ethersproject/*` chain inside `@hashgraph/sdk`): the advisory ("risky cryptographic implementation") covers **every published version** — there is no patched release to upgrade to. It is reachable only through the SDK's ECDSA signing path. Nothing to do but wait for upstream; not a reason to fork the Hedera SDK for a course project.
+- `tmp` ≤0.2.5 (1 high, via `solc`): `npm audit fix --force` would downgrade solc to 0.5.0, which cannot compile our `^0.8.19` contracts. `tmp` is only used by solc's CLI import-resolution path; our `scripts/compileContract.js` calls `solc.compile()` on in-memory sources and never touches it. Dev-dependency only — it is not in any runtime path.
 
 ## Known gaps (worth naming, not hiding)
 

@@ -10,6 +10,7 @@
 //   node scripts/compileContract.js
 //   node scripts/03-deployContract.js     -> CONTRACT_ID
 //   node scripts/registerAllParties.js
+//   node scripts/05-authorizeLab.js       (lab's own key signs test results)
 // (paste each printed ID into .env before continuing)
 //
 //   node demo.js
@@ -17,7 +18,7 @@
 import dotenv from "dotenv";
 dotenv.config();
 
-import { operatorId, operatorKey, loadPartyCredentials } from "./src/hederaConfig.js";
+import { operatorId, operatorKey, makePartyClient } from "./src/hederaConfig.js";
 import { mintUnit } from "./src/mintUnit.js";
 import { submitTestResult } from "./src/submitTestResult.js";
 import { transferCustody } from "./src/transferCustody.js";
@@ -30,7 +31,10 @@ if (!tokenId || !topicId || !contractId) {
   process.exit(1);
 }
 
-const lab = loadPartyCredentials("LAB");
+// The lab signs its own test submissions (msg.sender = the lab's account),
+// so the gate contract's onlyAuthorizedLab check is enforced for real.
+// Requires scripts/05-authorizeLab.js to have been run once.
+const lab = makePartyClient("LAB");
 
 async function main() {
   console.log("\n=== 1. Mint unit A (a healthy donation) ===");
@@ -41,8 +45,8 @@ async function main() {
     collectionCenterId: "CTR-01",
   });
 
-  console.log("\n=== 2. Unit A passes its test ===");
-  await submitTestResult({ contractId, topicId, serial: serialA, passed: true });
+  console.log("\n=== 2. Unit A passes its test (signed by the lab's own key) ===");
+  await submitTestResult({ contractId, topicId, serial: serialA, passed: true, client: lab.client });
 
   console.log("\n=== 3. Unit A is transferred to the lab (contract clears it) ===");
   await transferCustody({
@@ -63,8 +67,8 @@ async function main() {
     collectionCenterId: "CTR-01",
   });
 
-  console.log("\n=== 5. Unit B FAILS its test ===");
-  await submitTestResult({ contractId, topicId, serial: serialB, passed: false });
+  console.log("\n=== 5. Unit B FAILS its test (signed by the lab's own key) ===");
+  await submitTestResult({ contractId, topicId, serial: serialB, passed: false, client: lab.client });
 
   console.log("\n=== 6. Attempt to transfer unit B anyway - contract should block it ===");
   const attempt = await transferCustody({

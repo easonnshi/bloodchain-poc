@@ -13,12 +13,12 @@
 // LAB party credentials) and a funded testnet operator account. Run with:
 //   npm test
 
-import { test } from "node:test";
+import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import dotenv from "dotenv";
 dotenv.config();
 
-import { operatorId, operatorKey, loadPartyCredentials } from "../src/hederaConfig.js";
+import { client, operatorId, operatorKey, makePartyClient } from "../src/hederaConfig.js";
 import { mintUnit } from "../src/mintUnit.js";
 import { submitTestResult } from "../src/submitTestResult.js";
 import { transferCustody } from "../src/transferCustody.js";
@@ -29,6 +29,17 @@ const configured = Boolean(tokenId && topicId && contractId && process.env.LAB_A
 
 const batchId = `TEST-BATCH-${Date.now()}`;
 
+// One lab client for the whole run, so the lab-signed submitTestResult path
+// is exercised AND the client can be closed afterwards. Without closing,
+// the SDK's open gRPC channels keep the event loop alive and `npm test`
+// never exits even though every test passed.
+const lab = configured ? makePartyClient("LAB") : null;
+
+after(() => {
+  lab?.client.close();
+  client.close();
+});
+
 test("mintUnit succeeds and returns a serial number", { skip: !configured && "run scripts/01-03 and fill in .env first" }, async () => {
   const serial = await mintUnit({ tokenId, topicId, donorBatchId: batchId, collectionCenterId: "CTR-TEST" });
   assert.ok(serial, "expected a truthy serial number");
@@ -36,10 +47,11 @@ test("mintUnit succeeds and returns a serial number", { skip: !configured && "ru
 });
 
 test("transferCustody blocks a unit that failed its test", { skip: !configured && "run scripts/01-03 and fill in .env first" }, async () => {
-  const lab = loadPartyCredentials("LAB");
   const serial = await mintUnit({ tokenId, topicId, donorBatchId: batchId, collectionCenterId: "CTR-TEST" });
 
-  await submitTestResult({ contractId, topicId, serial, passed: false });
+  // Signed by the lab's own key - exercises the contract's onlyAuthorizedLab
+  // path for real (requires scripts/05-authorizeLab.js to have been run).
+  await submitTestResult({ contractId, topicId, serial, passed: false, client: lab.client });
 
   const result = await transferCustody({
     contractId,

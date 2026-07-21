@@ -42,7 +42,15 @@ export async function transferCustody({
   let cleared = true;
   try {
     await checkSubmit.getReceipt(client); // throws ReceiptStatusError on revert
-  } catch {
+  } catch (err) {
+    // Only an actual contract revert means "the gate blocked this unit."
+    // Anything else (network failure, expired transaction, fee problem) is
+    // an infrastructure error, and must NOT be recorded on the permanent
+    // HCS log as TRANSFER_BLOCKED - that would be a false fraud signal in
+    // an audit trail that is supposed to be trustworthy. Rethrow those.
+    if (!String(err.status ?? err.message).includes("CONTRACT_REVERT")) {
+      throw err;
+    }
     cleared = false;
   }
 
