@@ -7,7 +7,7 @@ import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useStore } from "../lib/store.jsx";
 import { hashscan } from "../lib/hashscan.js";
-import { consensusParts, EVENT_LABELS, timeAgo } from "../lib/format.js";
+import { consensusParts, EVENT_LABELS, isVisibleEvent, timeAgo } from "../lib/format.js";
 import { VerifyLink } from "./ui.jsx";
 
 const EVENT_TONES = {
@@ -16,16 +16,13 @@ const EVENT_TONES = {
   FLAGGED: "text-warn",
   BATCH_ALERT: "text-warn",
   POST_USE_ALERT: "text-warn",
-  PENALTY_APPLIED: "text-critical",
-  STAFF_SUSPENDED: "text-critical",
   TEST_RESULT: "text-ink",
   TRANSFUSED: "text-good",
-  AUTHORITY_ELECTED: "text-series-1",
 };
 
 export default function ConsensusFeed({ limit = 14, compact = false }) {
   const { events, isSim } = useStore();
-  const shown = events.slice(0, limit);
+  const shown = events.filter(isVisibleEvent).slice(0, limit);
 
   return (
     <div className="panel flex flex-col min-h-0">

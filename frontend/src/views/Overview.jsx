@@ -11,7 +11,7 @@ import ConsensusFeed from "../components/ConsensusFeed.jsx";
 import { StatTile, ActionButton, Badge } from "../components/ui.jsx";
 
 export default function Overview() {
-  const { units, events, oversight, actions, storyState, isSim } = useStore();
+  const { units, events, actions, storyState, isSim } = useStore();
 
   const active = units.filter((u) => u.status !== "closed").length;
   const blocked = events.filter((e) => e.eventType === "TRANSFER_BLOCKED").length;
@@ -78,29 +78,6 @@ export default function Overview() {
         <FlowMap height={310} />
         <ConsensusFeed limit={12} />
       </div>
-
-      {/* oversight strip */}
-      {oversight && (
-        <div className="panel px-4 py-3 flex flex-wrap items-center gap-x-6 gap-y-2">
-          <span className="overline">Oversight</span>
-          <span className="text-sm text-ink-2">
-            authority:{" "}
-            <span className="font-semibold text-ink">
-              {oversight.orgs?.[oversight.authority]?.name ?? oversight.authority}
-            </span>
-          </span>
-          {Object.values(oversight.orgs ?? {}).map((o) => (
-            <span key={o.role ?? o.address} className="text-xs text-ink-3">
-              {o.name ?? o.role}:{" "}
-              <span className="ledger text-ink-2">
-                {o.bondHbar != null ? `${o.bondHbar}ℏ bond` : "unregistered"}
-              </span>
-              {o.scandalCount > 0 && <span className="text-critical"> · {o.scandalCount} scandal{o.scandalCount > 1 ? "s" : ""}</span>}
-              {o.suspended && <span className="text-critical font-semibold"> · SUSPENDED</span>}
-            </span>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

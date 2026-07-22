@@ -1,5 +1,16 @@
 # Changes: POC → final DDiB26 submission
 
+> **Update (de-scope, 21.07.2026):** the team decided to scope the
+> presentation to the core custody chain. The Oversight DAO and
+> Reconciliation tabs were removed from the frontend, DAO references were
+> scrubbed from the remaining views (oversight event types are filtered
+> from feeds/traces; the sim story ends at the stale alert), and all
+> documents plus the Word report were updated to match. The oversight
+> backend (BloodOversight contract, `demo-oversight*.js`, server
+> endpoints) remains in the repo as optional CLI-only material — nothing
+> in the core depends on it. The description below predates the de-scope
+> where it mentions the oversight/reconciliation UI.
+
 PR-sized summary for the team before merging. Contract sources are
 **untouched** — no redeploys needed; existing `.env` IDs keep working.
 

@@ -6,13 +6,6 @@
 // without keys, never to fake verifiability. In live mode every one of
 // these actions is a real signed transaction with a HashScan link.
 
-const ROLES = ["BANK", "LAB", "HOSPITAL", "TRANSPORT"];
-const ROLE_NAMES = {
-  BANK: "Zurich Blood Bank",
-  LAB: "Diagnostics Lab AG",
-  HOSPITAL: "University Hospital",
-  TRANSPORT: "MedTransport GmbH",
-};
 const SIM_ACCOUNTS = {
   BANK: "0.0.900001",
   LAB: "0.0.900002",
@@ -21,7 +14,6 @@ const SIM_ACCOUNTS = {
 };
 
 const now = () => Date.now();
-const monthsAgo = (m) => new Date(now() - m * 30 * 86400_000).toISOString();
 const daysAgo = (d) => new Date(now() - d * 86400_000).toISOString();
 
 function consensusTs(offsetMs = 0) {
@@ -43,45 +35,7 @@ export class SimEngine {
     this.events = [];
     this.nextSerial = 108;
     this.story = { running: false, step: 0, total: 0, caption: null };
-    this.oversight = {
-      authority: "LAB",
-      election: { open: false, id: 1, candidates: [], votes: [] },
-      investigations: [
-        {
-          id: 0,
-          subjectRole: "HOSPITAL",
-          serial: "97",
-          reason: "unit 97 held 14 days with no transfusion or disposal logged",
-          resolved: true,
-          guilty: true,
-          penaltyHbar: 2,
-        },
-      ],
-      staff: {
-        "NURSE-114": { employer: "HOSPITAL", suspended: false },
-        "TECH-201": { employer: "LAB", suspended: false },
-      },
-      orgs: {
-        BANK: this.#org("BloodBank", 9, 10, 0, 80, false),
-        LAB: this.#org("Lab", 12, 10, 0, 90, false),
-        HOSPITAL: this.#org("Hospital", 7, 8, 1, 70, false),
-        TRANSPORT: this.#org("Transport", 4, 10, 0, 60, false),
-      },
-    };
     this.#seed();
-  }
-
-  #org(type, tenureMonths, bondHbar, scandalCount, reviewScore, suspended) {
-    return { type, registeredAt: monthsAgo(tenureMonths), bondHbar, scandalCount, reviewScore, suspended };
-  }
-
-  voteWeight(role) {
-    const o = this.oversight.orgs[role];
-    if (!o || o.suspended) return 0;
-    const tenureMonths = Math.floor((now() - Date.parse(o.registeredAt)) / (30 * 86400_000));
-    const base = 10 + tenureMonths * 2 + Math.floor(o.reviewScore / 10);
-    const malus = o.scandalCount * 2;
-    return malus >= base ? 1 : base - malus;
   }
 
   subscribe(fn) {
@@ -176,8 +130,6 @@ export class SimEngine {
     this.#upsert(106, { status: "quarantined", flagReason: "sibling of #105: failed infectious disease panel" });
     this.#event({ unitId: "106", eventType: "BATCH_ALERT", reason: "sibling of #105: failed infectious disease panel", donorBatchId: "DON-2402" }, -3.0 * 86400_000 + 90_000);
 
-    // The diversion-gap exhibit: transfused on paper, but reconciliation
-    // against patient records won't find a matching record (see Reconcile).
     mint(107, "DON-2403", 1.4);
     test(107, true, "NURSE-114", 1.2);
     move(107, "HOSPITAL", 1.0);
@@ -202,10 +154,6 @@ export class SimEngine {
   }
 
   async submitTest(serial, passed, staffId = "TECH-201", testType = "infectious_disease_panel") {
-    const staff = this.oversight.staff[staffId];
-    if (staff?.suspended) {
-      throw new Error(`staff ${staffId} is suspended on-chain - result rejected`);
-    }
     await sleep(SEAL_MS);
     this.#upsert(serial, {
       status: passed ? "tested_pass" : "tested_fail",
@@ -299,137 +247,6 @@ export class SimEngine {
     return { staleUnits: staleList };
   }
 
-  // ---- oversight ---------------------------------------------------------
-
-  oversightStatus() {
-    const orgs = {};
-    for (const role of ROLES) {
-      const o = this.oversight.orgs[role];
-      orgs[role] = {
-        role,
-        name: ROLE_NAMES[role],
-        address: SIM_ACCOUNTS[role],
-        bondHbar: o.bondHbar,
-        scandalCount: o.scandalCount,
-        reviewScore: o.reviewScore,
-        suspended: o.suspended,
-        voteWeight: this.voteWeight(role),
-        isAuthority: this.oversight.authority === role,
-      };
-    }
-    return {
-      authority: this.oversight.authority,
-      orgs,
-      election: this.oversight.election,
-      investigations: this.oversight.investigations,
-      staff: this.oversight.staff,
-    };
-  }
-
-  async openInvestigation(subjectRole, serial, reason, openedByRole = "TRANSPORT") {
-    await sleep(SEAL_MS);
-    const id = this.oversight.investigations.length;
-    this.oversight.investigations.push({
-      id,
-      subjectRole,
-      serial: String(serial),
-      reason,
-      openedByRole,
-      resolved: false,
-      guilty: false,
-      penaltyHbar: 0,
-    });
-    this.#event({ unitId: String(serial), eventType: "INVESTIGATION_OPENED", investigationId: id, subject: subjectRole });
-    this.#notify();
-    return { investigationId: id };
-  }
-
-  async resolveInvestigation(id, guilty, penaltyHbar) {
-    await sleep(SEAL_MS);
-    const inv = this.oversight.investigations[id];
-    if (!inv || inv.resolved) throw new Error("investigation missing or already resolved");
-    inv.resolved = true;
-    inv.guilty = guilty;
-    if (guilty) {
-      const org = this.oversight.orgs[inv.subjectRole];
-      const maxSlash = org.bondHbar * 0.2; // MAX_PENALTY_BPS, verbatim
-      const slash = Math.min(penaltyHbar, maxSlash);
-      inv.penaltyHbar = Number(slash.toFixed(2));
-      org.bondHbar = Number((org.bondHbar - slash).toFixed(2));
-      org.scandalCount += 1;
-      if (org.bondHbar < 2.5 || org.scandalCount >= 5) org.suspended = true;
-    }
-    this.#event({
-      unitId: inv.serial,
-      eventType: "PENALTY_APPLIED",
-      investigationId: id,
-      guilty,
-      penaltyHbar: inv.penaltyHbar,
-      subject: inv.subjectRole,
-    });
-    this.#notify();
-    return { status: "SUCCESS" };
-  }
-
-  async suspendStaff(staffId) {
-    await sleep(SEAL_MS);
-    const staff = this.oversight.staff[staffId];
-    if (!staff) throw new Error(`unknown staff ${staffId}`);
-    staff.suspended = true;
-    this.#event({ unitId: "-", eventType: "STAFF_SUSPENDED", staffId });
-    this.#notify();
-    return { status: "SUCCESS" };
-  }
-
-  async registerStaff(role, staffId) {
-    await sleep(SEAL_MS);
-    this.oversight.staff[staffId] = { employer: role, suspended: false };
-    this.#notify();
-    return { status: "SUCCESS" };
-  }
-
-  async startElection(candidateRoles) {
-    await sleep(SEAL_MS);
-    const el = this.oversight.election;
-    if (el.open) throw new Error("election already open");
-    el.open = true;
-    el.id += 1;
-    el.candidates = candidateRoles;
-    el.votes = [];
-    this.#event({ unitId: "-", eventType: "ELECTION_STARTED", electionId: el.id, candidates: candidateRoles });
-    this.#notify();
-    return { status: "SUCCESS" };
-  }
-
-  async castVote(voterRole, candidateRole) {
-    await sleep(SEAL_MS);
-    const el = this.oversight.election;
-    if (!el.open) throw new Error("no open election");
-    if (el.votes.some((v) => v.voter === voterRole)) throw new Error(`${voterRole} already voted`);
-    const weight = this.voteWeight(voterRole);
-    if (weight <= 0) throw new Error(`${voterRole} is not eligible to vote`);
-    el.votes.push({ voter: voterRole, candidate: candidateRole, weight });
-    this.#notify();
-    return { status: "SUCCESS", weight };
-  }
-
-  async closeElection() {
-    await sleep(SEAL_MS);
-    const el = this.oversight.election;
-    if (!el.open) throw new Error("no open election");
-    const tally = {};
-    for (const v of el.votes) tally[v.candidate] = (tally[v.candidate] || 0) + v.weight;
-    const winner = el.candidates.reduce(
-      (best, c) => ((tally[c] || 0) > (tally[best] || 0) ? c : best),
-      el.candidates[0]
-    );
-    el.open = false;
-    this.oversight.authority = winner;
-    this.#event({ unitId: "-", eventType: "AUTHORITY_ELECTED", electionId: el.id, newAuthority: winner });
-    this.#notify();
-    return { status: "SUCCESS", newAuthority: winner };
-  }
-
   // ---- the scripted presentation story -----------------------------------
 
   async playStory() {
@@ -442,7 +259,7 @@ export class SimEngine {
       await sleep(pauseMs);
     };
 
-    this.story = { running: true, step: 0, total: 12, caption: null };
+    this.story = { running: true, step: 0, total: 8, caption: null };
     this.#notify();
     let a = null;
     let b = null;
@@ -467,24 +284,9 @@ export class SimEngine {
       await step("Unit B is flagged. The batch recall cascades to every sibling - including unit A, already at the hospital.", () =>
         this.flag(b, "contamination suspected")
       );
-      await step("Days pass. Unit A is never transfused, never disposed. The silence itself is the signal.", () =>
-        this.staleCheck(1)
+      await step("The ledger remembers all of it - every event above is a permanent, ordered record. That is the product.", () =>
+        this.staleCheck(1), 1500
       );
-      await step("Any member can flag the silence: transport opens an on-chain investigation against the hospital.", async () => {
-        const inv = await this.openInvestigation("HOSPITAL", a, `unit ${a} held past limit with no closing event`, "TRANSPORT");
-        this._storyInv = inv.investigationId;
-      });
-      await step("Verdict: guilty. The bond is slashed on-chain - capped at 20%, graduated, permanent.", () =>
-        this.resolveInvestigation(this._storyInv, true, 2)
-      );
-      await step("A new election begins. The hospital votes - with a visibly smaller voice.", async () => {
-        await this.startElection(["BANK", "LAB"]);
-        await this.castVote("BANK", "BANK");
-        await this.castVote("LAB", "LAB");
-        await this.castVote("TRANSPORT", "LAB");
-        await this.castVote("HOSPITAL", "BANK");
-      });
-      await step("The ledger remembers all of it. That is the product.", () => this.closeElection(), 1500);
     } finally {
       this.story.running = false;
       this.story.caption = null;
@@ -498,11 +300,10 @@ export const SIM_CONFIG = {
   tokenId: "0.0.SIM-TOKEN",
   topicId: "0.0.SIM-TOPIC",
   contractId: "0.0.SIM-GATE",
-  oversightContractId: "0.0.SIM-OVERSIGHT",
   operatorId: SIM_ACCOUNTS.BANK,
   accounts: SIM_ACCOUNTS,
   configured: false,
   simulated: true,
 };
 
-export { ROLE_NAMES, SIM_ACCOUNTS };
+export { SIM_ACCOUNTS };

@@ -11,7 +11,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api.js";
 import { recentTopicMessages } from "./mirror.js";
-import { SimEngine, SIM_CONFIG, ROLE_NAMES } from "./sim.js";
+import { SimEngine, SIM_CONFIG } from "./sim.js";
 
 const StoreContext = createContext(null);
 
@@ -22,7 +22,6 @@ export function StoreProvider({ children }) {
   const [config, setConfig] = useState(null);
   const [units, setUnits] = useState([]);
   const [events, setEvents] = useState([]);
-  const [oversight, setOversight] = useState(null);
   const [storyState, setStoryState] = useState({ running: false, step: 0, total: 0, caption: null });
   const simRef = useRef(null);
 
@@ -62,7 +61,6 @@ export function StoreProvider({ children }) {
     const sync = () => {
       setUnits(Object.values(sim.units));
       setEvents([...sim.events].reverse()); // newest first, like the mirror feed
-      setOversight(sim.oversightStatus());
       setStoryState({ ...sim.story });
     };
     sync();
@@ -87,19 +85,6 @@ export function StoreProvider({ children }) {
         } catch {
           /* mirror hiccup - keep last */
         }
-      }
-      try {
-        const status = await api.oversightStatus();
-        if (!stop) {
-          // Normalize to the sim shape so views don't care about mode.
-          const orgs = {};
-          for (const [role, o] of Object.entries(status.orgs || {})) {
-            orgs[role] = { role, name: ROLE_NAMES[role] ?? role, ...o };
-          }
-          setOversight({ authority: status.authority, orgs, election: null, investigations: null });
-        }
-      } catch {
-        if (!stop) setOversight(null); // oversight contract not configured
       }
     };
     tick();
@@ -138,24 +123,6 @@ export function StoreProvider({ children }) {
       flag: (serial, reason) => (live ? api.flag(serial, reason).then(after) : sim().flag(serial, reason)),
       staleCheck: (thresholdMs) => (live ? api.staleCheck(thresholdMs).then(after) : sim().staleCheck(thresholdMs)),
       drift: () => (live ? api.drift() : Promise.resolve({ drift: [], simulated: true })),
-      openInvestigation: (subjectRole, serial, reason, openedByRole) =>
-        live
-          ? api.openInvestigation(subjectRole, serial, reason, openedByRole).then(after)
-          : sim().openInvestigation(subjectRole, serial, reason, openedByRole),
-      resolveInvestigation: (id, guilty, penaltyHbar, authorityRole, subjectRole, serial) =>
-        live
-          ? api.resolveInvestigation(id, guilty, penaltyHbar, authorityRole, subjectRole, serial).then(after)
-          : sim().resolveInvestigation(id, guilty, penaltyHbar),
-      suspendStaff: (staffId, authorityRole) =>
-        live ? api.suspendStaff(staffId, authorityRole).then(after) : sim().suspendStaff(staffId),
-      registerStaff: (role, staffId) =>
-        live ? api.registerStaff(role, staffId).then(after) : sim().registerStaff(role, staffId),
-      startElection: (candidateRoles, authorityRole) =>
-        live ? api.startElection(candidateRoles, authorityRole).then(after) : sim().startElection(candidateRoles),
-      castVote: (voterRole, candidateRole) =>
-        live ? api.castVote(voterRole, candidateRole).then(after) : sim().castVote(voterRole, candidateRole),
-      closeElection: (authorityRole) =>
-        live ? api.closeElection(authorityRole).then(after) : sim().closeElection(),
       playStory: () => (live ? Promise.resolve() : sim().playStory()),
     };
   }, [mode, config]);
@@ -165,7 +132,6 @@ export function StoreProvider({ children }) {
     config,
     units,
     events,
-    oversight,
     actions,
     storyState,
     refresh,

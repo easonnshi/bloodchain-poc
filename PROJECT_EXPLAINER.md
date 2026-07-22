@@ -528,6 +528,15 @@ are on a ledger every party already watches.
 
 ## 5. The oversight layer: fraud, punishment, and governance
 
+> **Scope note:** everything in this section exists in the repository as
+> an optional, CLI-only extension (the `BloodOversight` contract and the
+> `demo-oversight*.js` scripts). It is **not part of the frontend or the
+> graded presentation scope** — the app deliberately does not surface it,
+> and filters its event types from all feeds. The exception is the
+> stale-unit monitor (§5.1), which is part of the core custody scope and
+> does appear in the UI. The section is kept because this document is the
+> definitive reference for the whole repository.
+
 The base system proves custody. The oversight layer answers the harder
 question: *what happens when a registered, authorized participant
 misbehaves?* Its threat model is stated honestly in `OVERSIGHT.md`: a
@@ -642,14 +651,13 @@ attesting labs per result, random audits — process, not cryptography.
 
 **6.2 The diversion gap.** A hospital that *fakes a `TRANSFUSED` event*
 and diverts the unit defeats the stale monitor — the chain sees a
-legitimate-looking closure. *Mitigation in place:* the Reconciliation
-view demonstrates the countermeasure — cross-checking on-chain
-`TRANSFUSED` events against an independent patient-record system; a
+legitimate-looking closure. *Named openly as a limitation:* the
+countermeasure is cross-checking on-chain `TRANSFUSED` events against an
+independent patient-record system, where a
 chain-event-with-no-matching-patient-record is precisely the signature of
-a faked closure. The patient records in the demo are mock data, labeled
-as such. *Production:* real (privacy-preserving) EHR integration, plus
-random physical audits — named in the design doc as exactly the thing
-blockchains cannot replace.
+a faked closure. *Production:* real (privacy-preserving) EHR integration,
+plus random physical audits — named in the design doc as exactly the
+thing blockchains cannot replace.
 
 **6.3 Test results are overwritable.** An authorized lab can resubmit and
 flip its own earlier verdict (Failed → Passed) — contract storage keeps

@@ -11,7 +11,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { useStore } from "../lib/store.jsx";
 import { allTopicMessages, nftInfo } from "../lib/mirror.js";
 import { hashscan } from "../lib/hashscan.js";
-import { consensusParts, EVENT_LABELS } from "../lib/format.js";
+import { consensusParts, EVENT_LABELS, isVisibleEvent } from "../lib/format.js";
 import { StatusBadge, VerifyLink, inputCls, Empty, Badge } from "../components/ui.jsx";
 
 const TIMELINE_TONES = {
@@ -22,7 +22,6 @@ const TIMELINE_TONES = {
   POST_USE_ALERT: "border-warn bg-warn/10 text-warn",
   TRANSFUSED: "border-good bg-good/10 text-good",
   TEST_RESULT: "border-series-1 bg-series-1/10 text-series-1",
-  PENALTY_APPLIED: "border-critical bg-critical/10 text-critical",
 };
 
 export default function Trace() {
@@ -41,7 +40,7 @@ export default function Trace() {
   useEffect(() => {
     if (!serial) return;
     if (isSim) {
-      setChainEvents(events.filter((e) => e.unitId === serial).slice().reverse());
+      setChainEvents(events.filter((e) => e.unitId === serial && isVisibleEvent(e)).slice().reverse());
       return;
     }
     if (!config?.topicId) return;
@@ -50,7 +49,7 @@ export default function Trace() {
     (async () => {
       try {
         const all = await allTopicMessages(config.topicId);
-        if (!cancelled) setChainEvents(all.filter((e) => e.unitId === serial));
+        if (!cancelled) setChainEvents(all.filter((e) => e.unitId === serial && isVisibleEvent(e)));
         if (config.tokenId) {
           try {
             const info = await nftInfo(config.tokenId, serial);

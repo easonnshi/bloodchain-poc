@@ -58,6 +58,8 @@ HEDERA_NETWORK=testnet
 TOKEN_ID=0.0.9663839
 TOPIC_ID=0.0.9663848
 CONTRACT_ID=0.0.9663858
+
+# optional - only needed for the CLI oversight demos, not for the app:
 OVERSIGHT_CONTRACT_ID=0.0.9663881
 ```
 
@@ -150,16 +152,12 @@ page load).
   unit you just failed — the contract refuses, and a permanent
   `TRANSFER_BLOCKED` event appears in the feed. That refusal is the
   project's core claim, demonstrated.
-- **Oversight DAO** — bonds, scandals, vote weights, investigations,
-  elections. *Try:* note the hospital's card — bond 8 ℏ (slashed), one
-  scandal dot, vote weight visibly lower than its peers. That's the
-  live aftermath of the demo's investigation.
-- **Reconciliation** — the diversion-gap exhibit. *Try:* click **Run
-  reconciliation** — one unit is flagged "on-chain, no patient record":
-  the exact signature of a faked transfusion event. (Patient records are
-  mock data, clearly labeled.)
 - **Explainer** — a 6-step animated storyboard (arrow keys advance).
   Built to be projected during the presentation.
+
+(The repo also contains an optional oversight layer — bonds, slashing, a
+weighted authority election — as CLI-only backend material. It is out of
+the presented scope and deliberately not surfaced anywhere in the app.)
 
 ## 7. Verify it's real, yourself (no keys, no trust in us)
 
@@ -173,8 +171,7 @@ Everything the UI claims can be checked on public infrastructure:
 3. In the app, open **Trace → unit 1** and click any event's
    **verify tx ⧉** link — HashScan shows the exact transaction (type
    `SUBMIT MESSAGE`, status `SUCCESS`, the paying account, the fee).
-4. The contracts: **…/contract/0.0.9663858** (gate) and
-   **…/contract/0.0.9663881** (oversight).
+4. The gate contract: **…/contract/0.0.9663858**.
 5. Raw API, if you prefer curl:
    `https://testnet.mirrornode.hedera.com/api/v1/topics/0.0.9663848/messages?limit=5&order=desc`
    (messages are base64-encoded JSON).

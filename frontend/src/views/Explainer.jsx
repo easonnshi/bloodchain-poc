@@ -28,8 +28,8 @@ const STEPS = [
   },
   {
     title: "Silence is a signal",
-    body: "Every legitimate unit ends with TRANSFUSED or DISPOSED. A unit held past the window with no closing event raises a STALE_ALERT — the detectable signature of possible diversion. Bonds are slashed on guilty verdicts; scandals shrink an org's voice in the next election.",
-    scene: "oversight",
+    body: "Every legitimate unit ends with TRANSFUSED or DISPOSED. A unit held past its holding window with no closing event raises a STALE_ALERT — the detectable signature of possible diversion, flagged automatically and recorded permanently for investigators.",
+    scene: "stale",
   },
   {
     title: "Anyone can check",
@@ -199,22 +199,40 @@ function Scene({ name }) {
           </text>
         </svg>
       );
-    case "oversight":
+    case "stale":
       return (
         <svg width="260" height="120" viewBox="0 0 260 120">
-          <motion.rect x="40" y="30" width="180" height="18" rx="9" fill="var(--color-surface-3)" />
-          <motion.rect x="40" y="30" height="18" rx="9" fill="var(--color-series-1)" initial={{ width: 180 }} animate={{ width: [180, 144] }} transition={{ delay: 0.6, duration: 0.8 }} />
-          <text x="130" y="24" textAnchor="middle" fill="var(--color-ink-2)" fontSize="10" fontFamily="var(--font-mono)">
-            bond 10ℏ → 8ℏ (slashed 20% max)
-          </text>
-          <motion.g initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.2 }}>
-            <text x="130" y="80" textAnchor="middle" fill="var(--color-ink)" fontSize="12" fontWeight="600">
-              vote weight 19 → 17
-            </text>
-            <text x="130" y="98" textAnchor="middle" fill="var(--color-ink-3)" fontSize="10">
-              the scandal follows them into the next election
-            </text>
-          </motion.g>
+          {drop(70, 55, crimson, 0.9)}
+          <motion.circle
+            cx="70"
+            cy="57"
+            r="22"
+            fill="none"
+            stroke={warn}
+            strokeWidth="2"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: [0, 1, 0.3, 1] }}
+            transition={{ delay: 0.4, duration: 1.6, repeat: Infinity }}
+          />
+          {/* the clock the holding window runs on */}
+          <circle cx="170" cy="45" r="18" fill="none" stroke={stroke} strokeWidth="2" />
+          <motion.line
+            x1="170" y1="45" x2="170" y2="32"
+            stroke="var(--color-ink-2)" strokeWidth="2" strokeLinecap="round"
+            style={{ transformOrigin: "170px 45px" }}
+            animate={{ rotate: 360 }}
+            transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+          />
+          <motion.text
+            x="170" y="90" textAnchor="middle" fill={warn} fontSize="11"
+            fontFamily="var(--font-mono)" fontWeight="700"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.0 }}
+          >
+            STALE_ALERT
+          </motion.text>
+          <motion.text x="170" y="106" textAnchor="middle" fill="var(--color-ink-3)" fontSize="9" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.4 }}>
+            no closing event inside the window
+          </motion.text>
         </svg>
       );
     case "verify":

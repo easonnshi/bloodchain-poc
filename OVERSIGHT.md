@@ -1,5 +1,12 @@
 # BloodChain Oversight Layer: anti-fraud detection, punishment, and DAO governance
 
+> **Scope note (final submission):** this layer is optional, CLI-only
+> backend material. It is not surfaced in the frontend and is outside the
+> graded presentation scope; the presented system is the core custody
+> chain plus the stale-unit monitor described in §1 below. Everything
+> else in this document describes the `BloodOversight` contract and the
+> `demo-oversight*.js` scripts, which remain runnable from the terminal.
+
 This extends the base POC (mint, test-gate, batch-flag) with a fourth capability: what happens when a registered party misbehaves, specifically a hospital secretly trading blood to a third party instead of transfusing it.
 
 ## The threat model, stated honestly

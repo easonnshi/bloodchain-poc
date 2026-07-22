@@ -28,28 +28,4 @@ export const api = {
   close: (serial, reason) => req(`/units/${serial}/close`, { method: "POST", body: { reason } }),
   flag: (serial, reason) => req(`/units/${serial}/flag`, { method: "POST", body: { reason } }),
   staleCheck: (thresholdMs) => req("/stale-check", { method: "POST", body: { thresholdMs } }),
-
-  oversightStatus: () => req("/oversight/status"),
-  registerOrg: (role, orgType, bondHbar) =>
-    req("/oversight/register", { method: "POST", body: { role, orgType, bondHbar } }),
-  registerStaff: (role, staffId) =>
-    req("/oversight/staff", { method: "POST", body: { role, staffId } }),
-  openInvestigation: (subjectRole, serial, reason, openedByRole) =>
-    req("/oversight/investigations", {
-      method: "POST",
-      body: { subjectRole, serial, reason, openedByRole },
-    }),
-  resolveInvestigation: (id, guilty, penaltyHbar, authorityRole, subjectRole, serial) =>
-    req(`/oversight/investigations/${id}/resolve`, {
-      method: "POST",
-      body: { guilty, penaltyHbar, authorityRole, subjectRole, serial },
-    }),
-  suspendStaff: (staffId, authorityRole) =>
-    req("/oversight/staff/suspend", { method: "POST", body: { staffId, authorityRole } }),
-  startElection: (candidateRoles, authorityRole) =>
-    req("/oversight/elections", { method: "POST", body: { candidateRoles, authorityRole } }),
-  castVote: (voterRole, candidateRole) =>
-    req("/oversight/elections/vote", { method: "POST", body: { voterRole, candidateRole } }),
-  closeElection: (authorityRole) =>
-    req("/oversight/elections/close", { method: "POST", body: { authorityRole } }),
 };

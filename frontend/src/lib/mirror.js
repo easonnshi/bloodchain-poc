@@ -31,7 +31,7 @@ export async function recentTopicMessages(topicId, limit = 25) {
   return (body.messages || []).map(decodeMessage);
 }
 
-/** Full topic history, oldest first (for custody trails + reconciliation). */
+/** Full topic history, oldest first (for custody trails). */
 export async function allTopicMessages(topicId) {
   const out = [];
   let url = `${MIRROR_BASE}/topics/${topicId}/messages?limit=100&order=asc`;

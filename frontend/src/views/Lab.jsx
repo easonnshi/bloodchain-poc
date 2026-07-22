@@ -63,8 +63,8 @@ export default function Lab() {
             </select>
           </Field>
           <p className="text-[11px] text-ink-3 max-w-xs leading-4">
-            The staff ID is recorded with every result (hash-only on-chain) — if this unit is ever
-            implicated, "who tested it?" is one lookup.
+            The staff ID is recorded with every result — if a unit is ever implicated, "who tested
+            it?" is one lookup in its permanent history.
           </p>
         </div>
         <UnitTable

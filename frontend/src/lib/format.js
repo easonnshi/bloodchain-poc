@@ -51,13 +51,23 @@ export const EVENT_LABELS = {
   BATCH_ALERT: "Batch alert",
   POST_USE_ALERT: "Post-use alert",
   STALE_ALERT: "Stale alert",
-  INVESTIGATION_OPENED: "Investigation opened",
-  PENALTY_APPLIED: "Penalty applied",
-  STAFF_SUSPENDED: "Staff suspended",
-  ELECTION_STARTED: "Election started",
-  AUTHORITY_ELECTED: "Authority elected",
-  ORG_REINSTATED: "Org reinstated",
 };
+
+// Event types the UI does not surface. The live HCS topic contains a few
+// oversight-layer events written by the optional CLI demos; the frontend's
+// scope is the core custody chain, so these are filtered from every feed
+// and trace (the ledger records are untouched - this is display scope,
+// not history editing).
+export const HIDDEN_EVENT_TYPES = new Set([
+  "INVESTIGATION_OPENED",
+  "PENALTY_APPLIED",
+  "STAFF_SUSPENDED",
+  "ELECTION_STARTED",
+  "AUTHORITY_ELECTED",
+  "ORG_REINSTATED",
+]);
+
+export const isVisibleEvent = (ev) => !HIDDEN_EVENT_TYPES.has(ev.eventType);
 
 export const STATUS_META = {
   collected: { label: "Collected", tone: "neutral", icon: "●" },

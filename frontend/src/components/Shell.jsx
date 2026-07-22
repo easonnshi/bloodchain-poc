@@ -14,8 +14,6 @@ const NAV = [
   { to: "/bank", label: "Blood Bank", icon: "🩸" },
   { to: "/lab", label: "Lab", icon: "⚗" },
   { to: "/logistics", label: "Hospital / Transport", icon: "⛨" },
-  { to: "/oversight", label: "Oversight DAO", icon: "⚖" },
-  { to: "/reconcile", label: "Reconciliation", icon: "≡" },
   { to: "/explainer", label: "Explainer", icon: "▸" },
 ];
 

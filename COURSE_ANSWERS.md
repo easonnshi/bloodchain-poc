@@ -2,8 +2,13 @@
 
 Presentation-ready answers to the two instructions from the "Final Project
 Introduction" deck (S4, 13.07.26), grounded in what this codebase actually
-does. Sources: the code itself, `OVERSIGHT.md`, `AUDIT_NOTES.md`,
-`PROJECT_WRITEUP.md`.
+does. Sources: the code itself, `AUDIT_NOTES.md`, `PROJECT_WRITEUP.md`.
+
+Scope note: these answers cover the **presented scope** — the core custody
+chain (mint → test-gate → transfer → close → batch recall) plus stale-unit
+detection. The repository also contains an optional, CLI-only oversight
+layer (bonds/slashing/elections) that is deliberately outside the
+presentation and not claimed here.
 
 > Note for the team: the deck was OCR-recovered and may be incomplete —
 > cross-check these two prompts against the original slides before the
@@ -22,19 +27,20 @@ unit with a missing or failed test **reverts on-chain and physically does
 not move**. The demo proves this by trying: unit B fails its panel, the
 transfer is attempted anyway, and the resulting `TRANSFER_BLOCKED` event is
 the network refusing, not our JavaScript being polite. The JS never decides
-pass/fail; it relays the contract's verdict.
+pass/fail; it relays the contract's verdict. And the verdict itself is
+signed by the **lab's own authorized key** (`authorizeLab()` +
+`onlyAuthorizedLab` on `msg.sender`), so the on-chain record permanently
+attributes every test result to the laboratory that attested it.
 
 **2. Absence-of-event detection.** We accept, in writing, that a blockchain
 cannot see a physical hand-off — and then engineer around it: every
 legitimate unit must end with `TRANSFUSED` or `DISPOSED`, so a unit that
 goes *silent* past its holding window is itself the fraud signal
-(`checkStaleUnits.js` → `STALE_ALERT`). Detection of what the chain
-*can't* see, from what it *can*: the missing event. Combined with the
-oversight layer, the alert flows into an on-chain investigation, a bond
-slash capped at 20% per case, and a scandal counter that mechanically
-shrinks the guilty org's voice in the next authority election
-(`voteWeight = 10 + 2·tenure + reviews/10 − 2·scandals`). Fraud has a
-price, and the price is computed by the contract.
+(`checkStaleUnits.js` → a permanent, public `STALE_ALERT` on the ledger).
+Detection of what the chain *can't* see, derived from what it *can*: the
+missing event. The alert is automatic, timestamped by network consensus,
+and impossible for the implicated holder to suppress or edit — exactly the
+evidence trail a human investigation needs.
 
 **3. Verifiability as the product surface.** The system uses three Hedera
 services for three jobs (HTS: unit existence/ownership; HCS:
@@ -68,44 +74,35 @@ to believe us — they can check, on infrastructure we don't control.
   recorded passing test" is exactly the kind of rule a smart contract can
   hold: objective, checkable at a single choke point (the token transfer),
   no oracle-quality judgment required at enforcement time.
-- **Bounded scope.** Five core functions, two contracts, one topic — small
-  enough to build honestly in a course project, rich enough to hit real
-  problems (see below) instead of toy ones.
+- **Bounded scope.** Five core functions, one enforcement contract, one
+  topic — small enough to build honestly in a course project, rich enough
+  to hit real problems (see below) instead of toy ones.
 
 ### (2) Challenges in the case, and how we addressed them
 
-Taken directly from the design docs' own honesty sections
-(`OVERSIGHT.md`, `AUDIT_NOTES.md`) — named, not hidden:
+Taken directly from the project's own honesty documentation
+(`AUDIT_NOTES.md`, `README.md` known-gaps section) — named, not hidden:
 
 - **Garbage-in (the oracle problem).** The chain proves a record wasn't
   altered *after* writing, not that it was true *when* written. A lab can
   submit a wrong result and the contract will faithfully enforce the wrong
   result. *Mitigation:* attribution, not omniscience — results are signed
-  by the lab's own authorized key (`authorizeLab()` + per-party signing),
-  staff are traceable per test via on-chain SHA-256 hashes, and a
-  suspended staff hash makes future results rejectable. Wrongness stays
-  possible; anonymous wrongness does not.
+  by the lab's own authorized key, and the technician's staff ID is
+  recorded with every test in the permanent log, so a wrong result is
+  never anonymous. Wrongness stays possible; anonymous wrongness does not.
+  Production would add independent re-testing and random audits.
 - **The diversion gap.** A hospital that fakes a `TRANSFUSED` event and
   diverts the unit defeats the stale-unit monitor. The chain alone cannot
-  close this. *Mitigation:* the reconciliation view cross-checks on-chain
-  `TRANSFUSED` events against an (mocked) independent patient-record
-  system; a chain-event-without-patient-record is the exact signature of a
-  faked closing event. Named as partially closed: the real EHR integration
-  is future work.
+  close this. *Addressed honestly as an open limitation:* the
+  countermeasure is off-chain reconciliation of on-chain `TRANSFUSED`
+  events against an independent patient-record system — a
+  chain-event-without-patient-record is the exact signature of a faked
+  closing event. That integration is named future work, precisely the kind
+  of random audit the design doc says blockchains cannot replace.
 - **Physical/digital binding.** An NFT can't feel whether the right bag was
   scanned. *Mitigation:* per-unit QR codes minted with the token tie the
   bag to its public trace page; the binding is still procedural (someone
   must scan honestly) and we say so.
-- **Off-chain facts on-chain (review scores).** Vote-weight inputs like
-  review scores are written by the current authority acting as an oracle —
-  that shifts trust rather than removing it. *Acknowledged openly;* a
-  production design would want multiple independent submitters or
-  commit-reveal.
-- **Governance bootstrap & incumbent power.** The deployer starts as
-  authority; `closeElection()` is called by the incumbent, who could
-  stall. *Mitigation:* the elect-first demo shows power actually
-  transferring by vote before any case exists; the deadline-based
-  auto-close is named as the production fix.
 - **Hedera-specific constraints** we hit and solved: 100-byte NFT metadata
   cap (full detail lives in HCS instead), token-association requirements,
   EVM address derivation differing for ED25519 vs ECDSA keys (resolved via
@@ -116,32 +113,30 @@ Taken directly from the design docs' own honesty sections
 
 - **Academic:** the project is a working case study in *hybrid
   enforcement* — which guarantees can move on-chain (custody gating,
-  economic slashing, weighted governance) versus which are irreducibly
-  social (verdicts, physical hand-offs, record truthfulness). The
-  absence-of-event detection pattern (monitoring for missing closing
-  events rather than pretending to observe the physical world) and the
-  graduated-slashing design (20% cap, suspension only on patterns,
-  rehabilitation path) are transferable mechanisms, not app features. It
-  also exercises Hedera's three-service architecture as a deliberate
-  design: consensus-ordered logs (HCS) and token registries (HTS) doing
-  jobs usually forced into expensive contract storage.
+  attributed attestations, automatic alerting) versus which are
+  irreducibly social (verdicts, physical hand-offs, record truthfulness).
+  The absence-of-event detection pattern — monitoring for missing closing
+  events rather than pretending to observe the physical world — is a
+  transferable mechanism, not an app feature. It also exercises Hedera's
+  three-service architecture as a deliberate design: consensus-ordered
+  logs (HCS) and token registries (HTS) doing jobs usually forced into
+  expensive contract storage.
 - **Social:** blood supply chains lose units to diversion and suffer
   recalls measured in days of manual tracing. The demonstrated properties
   — per-unit provenance a patient's family can independently verify,
-  batch recall in seconds instead of days, fraud that leaves a permanent
-  public evidence trail and an automatic financial consequence — target
-  real WHO-documented problems in exactly the settings (multi-party,
-  low-mutual-trust health systems) where "just use one shared database"
-  fails, because no party can be the database's owner. Honesty matters
-  socially too: overclaiming ("blockchain prevents fraud") erodes trust in
-  the technology; this project's docs state precisely what is and isn't
-  guaranteed.
+  batch recall in seconds instead of days, custody gaps that surface as
+  automatic public alerts — target real WHO-documented problems in
+  exactly the settings (multi-party, low-mutual-trust health systems)
+  where "just use one shared database" fails, because no party can be the
+  database's owner. Honesty matters socially too: overclaiming
+  ("blockchain prevents fraud") erodes trust in the technology; this
+  project's docs state precisely what is and isn't guaranteed.
 
 ### (4) Deriving the case — other applications
 
 The reusable core is: *per-item token + append-only event log + a
-contract gate on a binary safety predicate + absence-of-event monitoring +
-bonded, elected oversight.* That composite pattern maps directly onto:
+contract gate on a binary safety predicate + absence-of-event
+monitoring.* That composite pattern maps directly onto:
 
 - **Organ and tissue transport:** same vein-to-vein structure, harder
   deadlines — the stale-unit monitor becomes a cold-chain timeout measured
@@ -154,9 +149,9 @@ bonded, elected oversight.* That composite pattern maps directly onto:
   precisely the property evidence lockers need.
 - **Food-safety recall (infant formula, meat lots):** batch-sibling
   quarantine transfers unchanged; the QR-on-the-bag becomes QR-on-the-lot.
-- **Humanitarian aid distribution:** bonded local distributors, weighted
-  community oversight, diversion detected as undelivered-and-silent
-  shipments — the oversight layer maps almost one-to-one.
+- **Humanitarian aid distribution:** diversion detected as
+  undelivered-and-silent shipments — the stale-alert pattern maps
+  one-to-one.
 
 The honest caveat transfers too: in every derivation, the ledger proves
 integrity of the record, and the last physical mile still needs

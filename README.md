@@ -2,7 +2,7 @@
 
 This is a working Node.js project implementing the vein-to-vein custody tracking system described in the BloodChain design doc: an HTS NFT per blood unit, an HCS event log for every custody step, and a Solidity contract on Hedera Smart Contract Service that blocks release of untested or failed units. It follows the proof-of-concept scope exactly: mint, log, test-gate a transfer, close, and batch-flag.
 
-On top of that base sits an **oversight layer** (see `OVERSIGHT.md` for the full design): stale-unit fraud detection, bonds and slashing for guilty organizations, nurse/staff traceability, and a weighted DAO election that chooses which organization holds oversight authority.
+On top of that base sits an **optional oversight layer** (see `OVERSIGHT.md` for the full design): bonds and slashing for guilty organizations, staff traceability, and a weighted DAO election. **Scope note:** the oversight layer is CLI-only backend material (contracts + demo scripts) and is deliberately *not* surfaced in the frontend or the graded presentation — the project's presented scope is the core custody chain (mint → test-gate → transfer → close → batch recall) plus stale-unit detection. Nothing in the core depends on it.
 
 Everything below is written in the order you should build and understand it, matching the 14 pieces from the design doc. Each section says what the piece does, why it exists, and points at the actual file.
 
@@ -121,9 +121,9 @@ Three tests using Node's built-in `node:test`, matching the design doc's list: m
 
 ---
 
-## 15-19. The oversight layer (anti-fraud, punishment, DAO governance)
+## 15-19. The oversight layer (optional, CLI-only — not in the frontend)
 
-Full design rationale, threat model, and honest limitations live in `OVERSIGHT.md`. The short version of what each new piece does:
+Full design rationale, threat model, and honest limitations live in `OVERSIGHT.md`. This layer is out of the presented scope: it exists as backend contracts and demo scripts you can run from the terminal, the frontend does not surface it, and the frontend filters its event types from feeds and traces. The stale-unit monitor (piece 15) is the exception — it is part of the core custody scope and appears in the UI as `STALE_ALERT` detection. The short version of what each piece does:
 
 ### 15. Stale-unit monitor — `src/checkStaleUnits.js`
 
@@ -173,7 +173,7 @@ node scripts/03-deployContract.js   # -> paste CONTRACT_ID into .env
 node scripts/registerAllParties.js  # associates lab/hospital/transport with the token
 node scripts/05-authorizeLab.js     # authorizes the LAB account on the gate contract
 
-# oversight layer
+# oversight layer (OPTIONAL - CLI demos only, not used by the frontend)
 node scripts/compileContract.js BloodOversight
 node scripts/04-deployOversight.js  # -> paste OVERSIGHT_CONTRACT_ID into .env
 ```
@@ -182,10 +182,12 @@ node scripts/04-deployOversight.js  # -> paste OVERSIGHT_CONTRACT_ID into .env
 
 ```
 node demo.js                        # core custody story (block + batch recall)
-node demo-oversight.js              # fraud -> investigation -> slash -> election
-node demo-oversight-elect-first.js  # same powers, election-first ordering (fresh oversight deploy recommended)
 npm test                            # 3 integration tests against real testnet
 npm run check-index                 # audit local cache against on-chain history (read-only)
+
+# optional oversight-layer CLI demos (out of presented scope):
+node demo-oversight.js              # fraud -> investigation -> slash -> election
+node demo-oversight-elect-first.js  # same powers, election-first ordering
 ```
 
 ### 3. Frontend + API server
@@ -210,9 +212,7 @@ Two modes, decided automatically at load:
 Views: Overview (live custody flow map + consensus feed), Trace (public
 per-unit history + QR bag label), Blood Bank (mint / recall / stale sweep /
 cache-vs-ledger audit), Lab (lab-key-signed verdicts), Hospital & Transport
-(transfers + closures), Oversight DAO (bonds, scandals, weighted elections,
-investigations), Reconciliation (patient-record cross-check — the diversion
-gap, demonstrated), and a step-through Explainer for the presentation.
+(transfers + closures), and a step-through Explainer for the presentation.
 
 ## Dependency security (npm audit status)
 
